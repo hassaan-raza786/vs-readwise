@@ -47,6 +47,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-faint);width:14px;height:14px;}
 .btn-icon{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);}
 .btn-icon:hover{border-color:var(--green-light);color:var(--green);background:var(--green-pale);}
+
+/* ── Cloud sync button ── */
+.sync-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:40px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;font-size:.76rem;font-weight:600;color:var(--text-muted);transition:all var(--tr);white-space:nowrap;}
+.sync-btn:hover{border-color:var(--green-light);color:var(--green);background:var(--green-pale);}
+.sync-btn.syncing{border-color:var(--green-light);color:var(--green);background:var(--green-pale);cursor:default;}
+.sync-btn.syncing .sync-icon{animation:syncSpin .8s linear infinite;}
+.sync-btn.synced{border-color:var(--green);color:var(--green);}
+@keyframes syncSpin{to{transform:rotate(360deg);}}
+.sync-icon{display:inline-block;font-size:.85rem;transition:transform var(--tr);}
+
 .content{padding:28px;flex:1;}
 .page{display:none;}
 .page.active{display:block;}
@@ -169,6 +179,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   .content{padding:16px;}
   .books-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));}
   .hl-panel{width:100%;top:auto;bottom:0;height:48%;border-top:1px solid var(--border);}
+  .sync-btn .sync-label{display:none;}
 }
 </style>
 </head>
@@ -185,8 +196,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </aside>
 <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 <main class="main">
-  <div class="mobile-header"><button class="btn-icon" onclick="toggleSidebar()">☰</button><span class="mobile-logo">🌿 Readwise</span><button class="btn-icon" onclick="toggleDark()"><span id="mThemeIcon">🌙</span></button></div>
-  <div class="topbar"><div class="topbar-title" id="topbarTitle">Library</div><div class="search-wrap"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input class="search-input" id="searchInput" placeholder="Search books…" oninput="handleSearch()"/></div><button class="btn-icon" onclick="toggleDark()"><span id="themeIcon">🌙</span></button></div>
+  <div class="mobile-header">
+    <button class="btn-icon" onclick="toggleSidebar()">☰</button>
+    <span class="mobile-logo">🌿 Readwise</span>
+    <button class="sync-btn" id="syncBtnMobile" onclick="syncLibraryToCloud(true)" title="Sync to Cloud">
+      <span class="sync-icon">☁️</span>
+    </button>
+    <button class="btn-icon" onclick="toggleDark()"><span id="mThemeIcon">🌙</span></button>
+  </div>
+  <div class="topbar">
+    <div class="topbar-title" id="topbarTitle">Library</div>
+    <div class="search-wrap" id="searchWrap"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input class="search-input" id="searchInput" placeholder="Search books…" oninput="handleSearch()"/></div>
+    <button class="sync-btn" id="syncBtnDesktop" onclick="syncLibraryToCloud(true)" title="Sync to Cloud">
+      <span class="sync-icon" id="syncIcon">☁️</span>
+      <span class="sync-label" id="syncLabel">Sync</span>
+    </button>
+    <button class="btn-icon" onclick="toggleDark()"><span id="themeIcon">🌙</span></button>
+  </div>
   <div class="content">
     <div class="page active" id="libraryPage">
       <div class="upload-zone" id="uploadZone"><input type="file" accept=".pdf" multiple onchange="handleFiles(this.files)"/><div class="upload-icon">📖</div><div class="upload-title">Drop PDFs here to add books</div><div class="upload-sub">Click to browse · multiple files supported</div></div>
@@ -217,7 +243,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="reader-body"><div class="canvas-scroll" id="canvasScroll"><div class="canvas-stack"><canvas id="pdfCanvas"></canvas><canvas id="hlCanvas"></canvas><canvas id="drawCanvas"></canvas></div></div><div class="hl-panel" id="hlPanel"><div class="hlp-header"><div class="hlp-title">Highlights</div><button class="hlp-close" onclick="toggleHlPanel()">✕</button></div><div class="hl-scroll" id="hlScroll"></div></div></div>
   <div class="reader-footer"><span id="footerPct">0%</span><div class="r-prog-wrap" onclick="seekPage(event)"><div class="r-prog-bar" id="rProgBar"></div></div><span>100%</span></div>
 </div>
-<div class="loading-overlay" id="loadingOverlay"><div class="loading-card"><div class="spinner"></div><div class="loading-text">Loading PDF…</div></div></div>
+<div class="loading-overlay" id="loadingOverlay"><div class="loading-card"><div class="spinner"></div><div class="loading-text" id="loadingText">Loading PDF…</div></div></div>
 <div class="modal-overlay" id="deleteModal"><div class="modal"><h3>Remove Book?</h3><p>This will permanently remove the book, all highlights, and drawings.</p><div class="modal-btns"><button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelete()">Remove</button></div></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 
@@ -227,7 +253,7 @@ if (typeof pdfjsLib !== 'undefined') {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
-// global state
+// ── global state ──────────────────────────────────────────────────────────────
 let books = [], annotations = {};
 let readerBookId = null, pdfDoc = null, pageNum = 1;
 let rendering = false, pendingPage = null, deleteTargetId = null, searchQuery = '';
@@ -236,8 +262,20 @@ let drawColor = '#2d6a4f', brushSize = 3, eraserSize = 20, hlColor = '#ffff0099'
 let lx = 0, ly = 0;
 let currentStrokes = [], currentHlRects = [], activeStroke = [];
 let hlStart = null, hlDragging = false;
+let syncInProgress = false;
 
-// ---------- IndexedDB (unlimited storage) ----------
+// ── User ID (persists across sessions) ────────────────────────────────────────
+function getUserId() {
+    let uid = localStorage.getItem('rw_user_id');
+    if (!uid) {
+        uid = 'rw_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+        localStorage.setItem('rw_user_id', uid);
+    }
+    return uid;
+}
+const userId = getUserId();
+
+// ── IndexedDB (primary / fast storage) ───────────────────────────────────────
 let dbPromise = null;
 function openDB() {
     if (dbPromise) return dbPromise;
@@ -253,11 +291,147 @@ function openDB() {
     });
     return dbPromise;
 }
-async function saveBooks() { try { const db = await openDB(); const tx = db.transaction('books', 'readwrite'); const store = tx.objectStore('books'); for (const b of books) store.put(b); await tx.done; } catch(e) { console.warn(e); toast('Save failed', 'error'); } }
-async function loadBooks() { try { const db = await openDB(); const tx = db.transaction('books', 'readonly'); const all = await tx.objectStore('books').getAll(); if (all.length) books = all; } catch(e) { console.warn(e); } }
-async function saveAnn() { try { const db = await openDB(); const tx = db.transaction('annotations', 'readwrite'); await tx.objectStore('annotations').put({ id: 'main', data: annotations }); await tx.done; } catch(e) { console.warn(e); } }
-async function loadAnn() { try { const db = await openDB(); const record = await db.transaction('annotations').objectStore('annotations').get('main'); if (record && record.data) annotations = record.data; } catch(e) { console.warn(e); } }
 
+async function saveBooks() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction('books', 'readwrite');
+        const store = tx.objectStore('books');
+        for (const b of books) store.put(b);
+        await tx.done;
+    } catch(e) { console.warn('saveBooks error:', e); toast('Save failed', 'error'); }
+}
+
+async function loadBooks() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction('books', 'readonly');
+        const all = await tx.objectStore('books').getAll();
+        if (all.length) books = all;
+    } catch(e) { console.warn('loadBooks error:', e); }
+}
+
+async function saveAnn() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction('annotations', 'readwrite');
+        await tx.objectStore('annotations').put({ id: 'main', data: annotations });
+        await tx.done;
+    } catch(e) { console.warn('saveAnn error:', e); }
+}
+
+async function loadAnn() {
+    try {
+        const db = await openDB();
+        const record = await db.transaction('annotations').objectStore('annotations').get('main');
+        if (record && record.data) annotations = record.data;
+    } catch(e) { console.warn('loadAnn error:', e); }
+}
+
+// ── Cloud Sync ────────────────────────────────────────────────────────────────
+
+// POST /api/books — saves full library + annotations to cloud
+async function syncLibraryToCloud(showFeedback = false) {
+    if (syncInProgress) return;
+    syncInProgress = true;
+    setSyncState('syncing');
+    try {
+        const response = await fetch('/api/books', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, books, annotations })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        setSyncState('synced');
+        if (showFeedback) toast('☁️ Library synced to cloud', 'success');
+    } catch (e) {
+        console.warn('syncLibraryToCloud error:', e);
+        setSyncState('idle');
+        if (showFeedback) toast('Cloud sync unavailable — saved locally', 'error');
+    } finally {
+        syncInProgress = false;
+    }
+}
+
+// GET /api/books?user_id=xxx — loads library + annotations from cloud into IndexedDB
+async function loadLibraryFromCloud() {
+    try {
+        const response = await fetch(`/api/books?user_id=${encodeURIComponent(userId)}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (!data || (!data.books?.length && !data.annotations)) return false;
+
+        if (data.books && data.books.length > 0) {
+            books = data.books;
+            // Persist cloud data into IndexedDB for offline use
+            const db = await openDB();
+            const tx = db.transaction('books', 'readwrite');
+            const store = tx.objectStore('books');
+            await tx.objectStore('books').clear();
+            for (const b of books) store.put(b);
+            await tx.done;
+        }
+        if (data.annotations) {
+            annotations = data.annotations;
+            const db = await openDB();
+            const tx = db.transaction('annotations', 'readwrite');
+            await tx.objectStore('annotations').put({ id: 'main', data: annotations });
+            await tx.done;
+        }
+        return true;
+    } catch (e) {
+        console.warn('loadLibraryFromCloud error:', e);
+        return false;
+    }
+}
+
+// DELETE /api/books/<book_id> — removes a book from cloud
+async function deleteBookFromCloud(bookId) {
+    try {
+        const response = await fetch(`/api/books/${encodeURIComponent(bookId)}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (e) {
+        // Silent — local delete still succeeds; cloud will sync on next auto-save
+        console.warn('deleteBookFromCloud error:', e);
+    }
+}
+
+// ── Wrapper functions: IndexedDB first, then cloud ────────────────────────────
+async function saveBooksAndSync() {
+    await saveBooks();
+    syncLibraryToCloud(); // fire-and-forget; errors are handled internally
+}
+
+async function saveAnnAndSync() {
+    await saveAnn();
+    syncLibraryToCloud();
+}
+
+// ── Sync button UI state ──────────────────────────────────────────────────────
+function setSyncState(state) {
+    const btns = [document.getElementById('syncBtnDesktop'), document.getElementById('syncBtnMobile')];
+    const icon = document.getElementById('syncIcon');
+    const label = document.getElementById('syncLabel');
+    btns.forEach(btn => {
+        if (!btn) return;
+        btn.classList.remove('syncing', 'synced');
+        if (state === 'syncing') btn.classList.add('syncing');
+        if (state === 'synced') btn.classList.add('synced');
+    });
+    if (icon) icon.textContent = state === 'synced' ? '✓' : '☁️';
+    if (label) label.textContent = state === 'syncing' ? 'Syncing…' : state === 'synced' ? 'Synced' : 'Sync';
+    if (state === 'synced') {
+        setTimeout(() => {
+            setSyncState('idle');
+        }, 2500);
+    }
+}
+
+// ── LocalStorage migration ────────────────────────────────────────────────────
 function migrateFromLocalStorage() {
     if (localStorage.getItem('rw_migrated_v3')) return false;
     const oldBooks = localStorage.getItem('rw_books_v3');
@@ -277,10 +451,17 @@ function migrateFromLocalStorage() {
     return false;
 }
 
+// ── Init: cloud first → IndexedDB fallback → auto-save every 30s ──────────────
 async function init() {
     if (migrateFromLocalStorage()) return;
-    await loadBooks();
-    await loadAnn();
+
+    // Try loading from cloud first; fall back to IndexedDB if no cloud data
+    const loadedFromCloud = await loadLibraryFromCloud();
+    if (!loadedFromCloud) {
+        await loadBooks();
+        await loadAnn();
+    }
+
     const th = localStorage.getItem('rw_theme') || 'light';
     document.documentElement.setAttribute('data-theme', th);
     updateThemeIcon(th);
@@ -288,9 +469,12 @@ async function init() {
     updateSidebar();
     setupDragDrop();
     setupCanvasEvents();
+
+    // Auto-sync to cloud every 30 seconds (silent, no toast)
+    setInterval(() => syncLibraryToCloud(false), 30000);
 }
 
-// Helper functions
+// ── Helper functions ──────────────────────────────────────────────────────────
 function toast(msg, type = 'success') {
     const w = document.getElementById('toastWrap');
     if (!w) return;
@@ -307,31 +491,61 @@ function toggleDark() {
     updateThemeIcon(n);
 }
 function updateThemeIcon(t) { const icon = t === 'dark' ? '☀️' : '🌙'; const ti = document.getElementById('themeIcon'); if (ti) ti.innerHTML = icon; const mi = document.getElementById('mThemeIcon'); if (mi) mi.innerHTML = icon; }
-function navigate(page) { /* same as before */ document.querySelectorAll('[data-page]').forEach(n => n.classList.remove('active')); const nav = document.querySelector(`[data-page="${page}"]`); if (nav) nav.classList.add('active'); const title = document.getElementById('topbarTitle'); if (title) title.innerText = page === 'library' ? 'Library' : 'Reading Stats'; const sw = document.getElementById('searchWrap'); if (sw) sw.style.display = page === 'library' ? '' : 'none'; document.querySelectorAll('.content .page').forEach(p => p.classList.remove('active')); if (page === 'library') { const lib = document.getElementById('libraryPage'); if (lib) lib.classList.add('active'); renderLibrary(); } else if (page === 'stats') { const stats = document.getElementById('statsPage'); if (stats) stats.classList.add('active'); renderStats(); } closeSidebar(); }
+function navigate(page) { document.querySelectorAll('[data-page]').forEach(n => n.classList.remove('active')); const nav = document.querySelector(`[data-page="${page}"]`); if (nav) nav.classList.add('active'); const title = document.getElementById('topbarTitle'); if (title) title.innerText = page === 'library' ? 'Library' : 'Reading Stats'; const sw = document.getElementById('searchWrap'); if (sw) sw.style.display = page === 'library' ? '' : 'none'; document.querySelectorAll('.content .page').forEach(p => p.classList.remove('active')); if (page === 'library') { const lib = document.getElementById('libraryPage'); if (lib) lib.classList.add('active'); renderLibrary(); } else if (page === 'stats') { const stats = document.getElementById('statsPage'); if (stats) stats.classList.add('active'); renderStats(); } closeSidebar(); }
 function toggleSidebar() { const s = document.getElementById('sidebar'); const o = document.getElementById('overlay'); if (s) s.classList.toggle('open'); if (o) o.classList.toggle('show'); }
 function closeSidebar() { const s = document.getElementById('sidebar'); const o = document.getElementById('overlay'); if (s) s.classList.remove('open'); if (o) o.classList.remove('show'); }
 function setupDragDrop() { const z = document.getElementById('uploadZone'); if (!z) return; z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('drag-over'); }); z.addEventListener('dragleave', () => z.classList.remove('drag-over')); z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); }); }
 function fmtSize(b) { return b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
-function handleFiles(files) { [...files].forEach(f => { if (f.type !== 'application/pdf') { toast(f.name + ' is not a PDF', 'error'); return; } if (books.find(b => b.name === f.name)) { toast('"' + f.name + '" already exists', 'error'); return; } const reader = new FileReader(); reader.onload = e => { const id = 'b' + Date.now() + Math.floor(Math.random() * 9999); const b = { id, name: f.name, displayName: f.name.replace('.pdf', '').replace(/_/g, ' '), size: fmtSize(f.size), dataUrl: e.target.result, totalPages: 0, currentPage: 1, status: 'pending', addedAt: Date.now(), cover: null }; books.push(b); if (typeof pdfjsLib !== 'undefined') { pdfjsLib.getDocument(e.target.result).promise.then(pdf => { b.totalPages = pdf.numPages; pdf.getPage(1).then(pg => { const vp = pg.getViewport({ scale: 0.5 }); const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(() => { b.cover = c.toDataURL('image/jpeg', 0.65); saveBooks(); renderLibrary(); updateSidebar(); }); }); saveBooks(); renderLibrary(); updateSidebar(); }).catch(() => { saveBooks(); renderLibrary(); updateSidebar(); }); } else { saveBooks(); renderLibrary(); updateSidebar(); } toast('📖 "' + b.displayName + '" added!', 'success'); }; reader.readAsDataURL(f); }); }
+
+function handleFiles(files) {
+    [...files].forEach(f => {
+        if (f.type !== 'application/pdf') { toast(f.name + ' is not a PDF', 'error'); return; }
+        if (books.find(b => b.name === f.name)) { toast('"' + f.name + '" already exists', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+            const id = 'b' + Date.now() + Math.floor(Math.random() * 9999);
+            const b = { id, name: f.name, displayName: f.name.replace('.pdf', '').replace(/_/g, ' '), size: fmtSize(f.size), dataUrl: e.target.result, totalPages: 0, currentPage: 1, status: 'pending', addedAt: Date.now(), cover: null };
+            books.push(b);
+            if (typeof pdfjsLib !== 'undefined') {
+                pdfjsLib.getDocument(e.target.result).promise.then(pdf => {
+                    b.totalPages = pdf.numPages;
+                    pdf.getPage(1).then(pg => {
+                        const vp = pg.getViewport({ scale: 0.5 });
+                        const c = document.createElement('canvas');
+                        c.width = vp.width; c.height = vp.height;
+                        pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(() => {
+                            b.cover = c.toDataURL('image/jpeg', 0.65);
+                            saveBooksAndSync(); renderLibrary(); updateSidebar();
+                        });
+                    });
+                    saveBooksAndSync(); renderLibrary(); updateSidebar();
+                }).catch(() => { saveBooksAndSync(); renderLibrary(); updateSidebar(); });
+            } else { saveBooksAndSync(); renderLibrary(); updateSidebar(); }
+            toast('📖 "' + b.displayName + '" added!', 'success');
+        };
+        reader.readAsDataURL(f);
+    });
+}
+
 function handleSearch() { searchQuery = document.getElementById('searchInput').value.toLowerCase(); renderLibrary(); }
 function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
 function bookCard(b) { const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0; const ems = ['📘', '📗', '📙', '📕', '📓', '📔']; const em = ems[Math.abs(b.name.length * 3) % 6]; const coverHtml = b.cover ? `<img src="${b.cover}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,#2d6a4f22,#52b78855);display:flex;align-items:center;justify-content:center;font-size:2.8rem;">${em}</div>`; const badgeCls = b.status === 'pending' ? 'badge-pending' : b.status === 'reading' ? 'badge-reading' : 'badge-completed'; const badgeTx = b.status === 'pending' ? '🕐 Pending' : b.status === 'reading' ? '📖 Reading' : '✅ Done'; const hlN = getHlCount(b.id); return `<div class="book-card" data-book-id="${b.id}"><div class="book-cover">${coverHtml}<div class="book-badge ${badgeCls}">${badgeTx}</div></div><div class="book-body"><div class="book-title">${escapeHtml(b.displayName)}</div><div class="book-size">${b.size}${b.totalPages ? ' · ' + b.totalPages + ' pp' : ''}${hlN ? ' · 🖊' + hlN : ''}</div><select class="status-select" onchange="changeStatus('${b.id}',this.value)" onclick="event.stopPropagation()"><option value="pending" ${b.status === 'pending' ? 'selected' : ''}>🕐 Pending</option><option value="reading" ${b.status === 'reading' ? 'selected' : ''}>📖 Reading</option><option value="completed" ${b.status === 'completed' ? 'selected' : ''}>✅ Completed</option></select><div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div><div class="book-meta"><div class="book-progress-text">p.${b.currentPage}${b.totalPages ? ' / ' + b.totalPages : ''} · ${pct}%</div><div class="book-actions"><button class="action-btn read" onclick="openReader('${b.id}')">▶</button><button class="action-btn del" onclick="askDelete('${b.id}')">🗑</button></div></div></div></div>`; }
 function renderLibrary() { const flt = books.filter(b => b.displayName.toLowerCase().includes(searchQuery) || b.name.toLowerCase().includes(searchQuery)); const grps = { pending: flt.filter(b => b.status === 'pending'), reading: flt.filter(b => b.status === 'reading'), completed: flt.filter(b => b.status === 'completed') }; ['pending', 'reading', 'completed'].forEach(s => { const grid = document.getElementById(s === 'reading' ? 'readingGrid' : s + 'Grid'); const count = document.getElementById(s === 'reading' ? 'readingCount' : s + 'Count'); const sect = document.getElementById(s === 'reading' ? 'readingSection' : s + 'Section'); if (count) count.textContent = grps[s].length + ' book' + (grps[s].length !== 1 ? 's' : ''); if (sect) sect.style.display = grps[s].length ? '' : 'none'; if (grid) grid.innerHTML = grps[s].map(bookCard).join(''); }); const es = document.getElementById('emptyState'); if (es) es.style.display = flt.length === 0 ? 'block' : 'none'; }
-function changeStatus(id, status) { const b = books.find(b => b.id === id); if (b) { b.status = status; saveBooks(); renderLibrary(); updateSidebar(); } }
+function changeStatus(id, status) { const b = books.find(b => b.id === id); if (b) { b.status = status; saveBooksAndSync(); renderLibrary(); updateSidebar(); } }
 function getHlCount(id) { if (!annotations[id]) return 0; return Object.values(annotations[id]).reduce((a, pg) => a + (pg.highlights?.length || 0), 0); }
 function updateSidebar() { const st = document.getElementById('sbTotal'); if (st) st.innerText = books.length; const sd = document.getElementById('sbDone'); if (sd) sd.innerText = books.filter(b => b.status === 'completed').length; }
 
-// --- PDF Reader with working next/prev ---
+// ── PDF Reader ────────────────────────────────────────────────────────────────
 async function openReader(id) {
     const b = books.find(b => b.id === id);
     if (!b || !b.dataUrl) { toast('Book data missing', 'error'); return; }
     showLoading('Opening PDF…');
     readerBookId = id; pageNum = b.currentPage || 1;
-    if (b.status === 'pending') { b.status = 'reading'; saveBooks(); }
+    if (b.status === 'pending') { b.status = 'reading'; saveBooksAndSync(); }
     try {
         if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js not loaded');
         pdfDoc = await pdfjsLib.getDocument(b.dataUrl).promise;
-        b.totalPages = pdfDoc.numPages; saveBooks();
+        b.totalPages = pdfDoc.numPages; saveBooksAndSync();
         document.getElementById('readerTitle').innerText = b.displayName;
         updateCompleteBtn(b);
         document.getElementById('readerPage').classList.add('active');
@@ -341,6 +555,7 @@ async function openReader(id) {
         hideLoading();
     } catch (err) { hideLoading(); toast('Failed to open PDF', 'error'); console.error(err); }
 }
+
 async function renderPage(num) {
     if (!pdfDoc) return;
     if (rendering) { pendingPage = num; return; }
@@ -360,13 +575,14 @@ async function renderPage(num) {
         if (pdfCanvas) await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
         pageNum = num;
         const b = books.find(b => b.id === readerBookId);
-        if (b) { b.currentPage = num; saveBooks(); }
+        if (b) { b.currentPage = num; saveBooksAndSync(); }
         loadPageAnn();
         updateReaderUI();
         renderHlPanel();
         if (pendingPage !== null) { const p = pendingPage; pendingPage = null; renderPage(p); }
     } finally { rendering = false; }
 }
+
 function updateReaderUI() {
     if (!pdfDoc) return;
     const total = pdfDoc.numPages;
@@ -382,6 +598,7 @@ function updateReaderUI() {
     const footerPct = document.getElementById('footerPct');
     if (footerPct) footerPct.innerText = pct + '%';
 }
+
 function changePage(delta) {
     if (!pdfDoc) return;
     const newPage = pageNum + delta;
@@ -397,11 +614,11 @@ function seekPage(e) {
     const n = Math.max(1, Math.min(pdfDoc.numPages, Math.round(r * pdfDoc.numPages)));
     renderPage(n);
 }
-function toggleComplete() { const b = books.find(b => b.id === readerBookId); if (!b) return; b.status = b.status === 'completed' ? 'reading' : 'completed'; saveBooks(); updateCompleteBtn(b); toast(b.status === 'completed' ? '🎉 Completed!' : 'Back to reading', 'success'); }
+function toggleComplete() { const b = books.find(b => b.id === readerBookId); if (!b) return; b.status = b.status === 'completed' ? 'reading' : 'completed'; saveBooksAndSync(); updateCompleteBtn(b); toast(b.status === 'completed' ? '🎉 Completed!' : 'Back to reading', 'success'); }
 function updateCompleteBtn(b) { const btn = document.getElementById('completeBtn'); if (btn) { btn.innerText = b.status === 'completed' ? '✓ Completed' : 'Mark Complete'; btn.style.background = b.status === 'completed' ? 'var(--green-light)' : ''; } }
 function closeReader() { pdfDoc = null; readerBookId = null; currentStrokes = []; currentHlRects = []; document.getElementById('readerPage').classList.remove('active'); document.getElementById('hlPanel').classList.remove('open'); document.body.style.overflow = ''; renderLibrary(); updateSidebar(); }
 function loadPageAnn() { if (!readerBookId) return; const pg = (annotations[readerBookId] || {})[pageNum] || { strokes: [], highlights: [] }; currentStrokes = JSON.parse(JSON.stringify(pg.strokes || [])); currentHlRects = JSON.parse(JSON.stringify(pg.highlights || [])); redrawDraw(); redrawHl(); }
-function savePageAnn() { if (!readerBookId) return; if (!annotations[readerBookId]) annotations[readerBookId] = {}; annotations[readerBookId][pageNum] = { strokes: JSON.parse(JSON.stringify(currentStrokes)), highlights: JSON.parse(JSON.stringify(currentHlRects)) }; saveAnn(); }
+function savePageAnn() { if (!readerBookId) return; if (!annotations[readerBookId]) annotations[readerBookId] = {}; annotations[readerBookId][pageNum] = { strokes: JSON.parse(JSON.stringify(currentStrokes)), highlights: JSON.parse(JSON.stringify(currentHlRects)) }; saveAnnAndSync(); }
 function setupCanvasEvents() { const dc = document.getElementById('drawCanvas'); const hl = document.getElementById('hlCanvas'); if (!dc || !hl) return; dc.addEventListener('mousedown', e => { if (!drawActive()) return; e.preventDefault(); onStart(e.offsetX, e.offsetY); }); dc.addEventListener('mousemove', e => { if (!drawActive() || !isPointerDown) return; onMove(e.offsetX, e.offsetY); }); dc.addEventListener('mouseup', () => { if (drawActive()) onEnd(); }); hl.addEventListener('mousedown', e => { if (activeTool !== 'highlight') return; e.preventDefault(); hlStart = { x: e.offsetX, y: e.offsetY }; hlDragging = true; }); hl.addEventListener('mousemove', e => { if (activeTool !== 'highlight' || !hlDragging) return; drawTmpHl(hlStart.x, hlStart.y, e.offsetX, e.offsetY); }); hl.addEventListener('mouseup', e => { if (activeTool !== 'highlight' || !hlDragging) return; finishHl(hlStart.x, hlStart.y, e.offsetX, e.offsetY); hlDragging = false; }); }
 function drawActive() { return activeTool === 'pencil' || activeTool === 'eraser'; }
 function onStart(x, y) { isPointerDown = true; lx = x; ly = y; activeStroke = [{ x, y }]; }
@@ -414,7 +631,7 @@ function redrawDraw() { const dc = document.getElementById('drawCanvas'); if (!d
 function drawTmpHl(x1, y1, x2, y2) { const hl = document.getElementById('hlCanvas'); if (!hl) return; const ctx = hl.getContext('2d'); ctx.clearRect(0, 0, hl.width, hl.height); currentHlRects.forEach(r => { ctx.fillStyle = r.color; ctx.fillRect(r.x, r.y, r.w, r.h); }); ctx.fillStyle = hlColor; ctx.fillRect(x1, y1, x2 - x1, y2 - y1); }
 function finishHl(x1, y1, x2, y2) { const w = x2 - x1, h = y2 - y1; if (Math.abs(w) < 5 || Math.abs(h) < 5) { redrawHl(); return; } const r = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(w), h: Math.abs(h), color: hlColor, page: pageNum, id: Date.now() }; currentHlRects.push(r); redrawHl(); savePageAnn(); renderHlPanel(); toast('Highlight saved', 'success'); }
 function redrawHl() { const hl = document.getElementById('hlCanvas'); if (!hl) return; const ctx = hl.getContext('2d'); ctx.clearRect(0, 0, hl.width, hl.height); currentHlRects.forEach(r => { ctx.fillStyle = r.color; ctx.fillRect(r.x, r.y, r.w, r.h); }); }
-function delHl(id, page) { const nid = parseInt(id); if (annotations[readerBookId] && annotations[readerBookId][page]) annotations[readerBookId][page].highlights = annotations[readerBookId][page].highlights.filter(h => h.id !== nid); if (page === pageNum) currentHlRects = currentHlRects.filter(h => h.id !== nid); redrawHl(); saveAnn(); renderHlPanel(); }
+function delHl(id, page) { const nid = parseInt(id); if (annotations[readerBookId] && annotations[readerBookId][page]) annotations[readerBookId][page].highlights = annotations[readerBookId][page].highlights.filter(h => h.id !== nid); if (page === pageNum) currentHlRects = currentHlRects.filter(h => h.id !== nid); redrawHl(); saveAnnAndSync(); renderHlPanel(); }
 function toggleHlPanel() { const p = document.getElementById('hlPanel'); if (p) { p.classList.toggle('open'); const btn = document.getElementById('hlPanelBtn'); if (btn) btn.classList.toggle('c-active', p.classList.contains('open')); renderHlPanel(); } }
 function renderHlPanel() { if (!readerBookId) return; const ann = annotations[readerBookId] || {}; const all = []; Object.entries(ann).forEach(([pg, d]) => { (d.highlights || []).forEach(h => all.push({ ...h, page: parseInt(pg) })); }); all.sort((a, b) => a.page - b.page); const sc = document.getElementById('hlScroll'); if (!sc) return; if (!all.length) { sc.innerHTML = '<div class="hlp-empty">No highlights yet.<br>Use the highlight tool to select areas.</div>'; return; } sc.innerHTML = all.map(h => `<div class="hl-item" style="border-color:${h.color.slice(0,7)}"><div><span style="font-weight:600;">Highlight</span></div><div class="hl-pg">Page ${h.page}</div><button class="hl-del-btn" onclick="delHl('${h.id}',${h.page})">✕</button></div>`).join(''); }
 function setTool(tool) { activeTool = tool; ['select', 'pencil', 'eraser', 'highlight'].forEach(t => { const btn = document.getElementById('tb' + t.charAt(0).toUpperCase() + t.slice(1)); if (btn) btn.classList.toggle('active', t === tool); }); const dc = document.getElementById('drawCanvas'); const hl = document.getElementById('hlCanvas'); if (dc) dc.className = ''; if (hl) hl.className = ''; if (tool === 'pencil' && dc) dc.classList.add('draw-active'); else if (tool === 'eraser' && dc) dc.classList.add('erase-active'); else if (tool === 'highlight' && hl) hl.classList.add('hl-active'); const gDraw = document.getElementById('grpDrawColors'); const gHl = document.getElementById('grpHlColors'); const gEr = document.getElementById('grpEraserSize'); if (gDraw) gDraw.style.display = tool === 'pencil' ? 'flex' : 'none'; if (gHl) gHl.style.display = tool === 'highlight' ? 'flex' : 'none'; if (gEr) gEr.style.display = tool === 'eraser' ? 'flex' : 'none'; }
@@ -422,12 +639,50 @@ function setDrawColor(el) { document.querySelectorAll('.color-dot').forEach(d =>
 function setHlColor(el) { document.querySelectorAll('.hl-dot').forEach(d => d.classList.remove('sel')); el.classList.add('sel'); hlColor = el.dataset.c; }
 function askDelete(id) { deleteTargetId = id; const modal = document.getElementById('deleteModal'); if (modal) modal.classList.add('show'); }
 function closeDeleteModal() { deleteTargetId = null; const modal = document.getElementById('deleteModal'); if (modal) modal.classList.remove('show'); }
-function confirmDelete() { books = books.filter(b => b.id !== deleteTargetId); delete annotations[deleteTargetId]; saveBooks(); saveAnn(); renderLibrary(); updateSidebar(); closeDeleteModal(); toast('Book removed', 'success'); }
+
+function confirmDelete() {
+    const idToDelete = deleteTargetId;
+    books = books.filter(b => b.id !== idToDelete);
+    delete annotations[idToDelete];
+    saveBooksAndSync();
+    saveAnnAndSync();
+    deleteBookFromCloud(idToDelete); // fire-and-forget; silent on failure
+    renderLibrary();
+    updateSidebar();
+    closeDeleteModal();
+    toast('Book removed', 'success');
+}
+
 function renderStats() { const total = books.length, done = books.filter(b => b.status === 'completed').length, reading = books.filter(b => b.status === 'reading').length, pending = books.filter(b => b.status === 'pending').length; let totalHl = 0, totalStrokes = 0; Object.values(annotations).forEach(b => { Object.values(b).forEach(p => { totalHl += p.highlights?.length || 0; totalStrokes += p.strokes?.length || 0; }); }); const statsGrid = document.getElementById('statsGrid'); if (statsGrid) statsGrid.innerHTML = `<div class="stat-card"><div class="big-num">${total}</div><div class="stat-label">Total Books</div></div><div class="stat-card"><div class="big-num">${done}</div><div class="stat-label">Completed</div></div><div class="stat-card"><div class="big-num">${reading}</div><div class="stat-label">In Progress</div></div><div class="stat-card"><div class="big-num">${pending}</div><div class="stat-label">Pending</div></div><div class="stat-card"><div class="big-num">${totalHl}</div><div class="stat-label">Highlights</div></div><div class="stat-card"><div class="big-num">${totalStrokes}</div><div class="stat-label">Drawings</div></div>`; const sorted = [...books].sort((a, b) => (b.currentPage / (b.totalPages || 1)) - (a.currentPage / (a.totalPages || 1))); const statsList = document.getElementById('statsList'); if (statsList) statsList.innerHTML = sorted.length ? sorted.map(b => { const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0; return `<div class="book-list-row"><div style="font-size:1.25rem;">📖</div><div class="list-info"><div class="list-title">${escapeHtml(b.displayName)}</div><div class="list-sub">${b.status === 'pending' ? '🕐 Pending' : b.status === 'reading' ? '📖 Reading' : '✅ Done'}</div></div><div class="list-right"><div class="list-pct">${pct}%</div><div class="list-bar-wrap"><div class="list-bar" style="width:${pct}%"></div></div></div></div>`; }).join('') : '<div class="empty-state">No books yet.</div>'; }
 function showLoading(t) { const lt = document.getElementById('loadingText'); if (lt) lt.innerText = t || 'Loading…'; const ol = document.getElementById('loadingOverlay'); if (ol) ol.classList.add('show'); }
 function hideLoading() { const ol = document.getElementById('loadingOverlay'); if (ol) ol.classList.remove('show'); }
+
 document.addEventListener('keydown', e => { const rp = document.getElementById('readerPage'); if (!rp || !rp.classList.contains('active')) return; if (e.key === 'Escape') closeReader(); if (e.key === 'ArrowRight') changePage(1); if (e.key === 'ArrowLeft') changePage(-1); if (e.key === 'p') setTool('pencil'); if (e.key === 'e') setTool('eraser'); if (e.key === 'h') setTool('highlight'); if (e.key === 's') setTool('select'); if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undoLast(); } });
-window.navigate = navigate; window.toggleSidebar = toggleSidebar; window.toggleDark = toggleDark; window.handleFiles = handleFiles; window.handleSearch = handleSearch; window.changeStatus = changeStatus; window.openReader = openReader; window.askDelete = askDelete; window.closeDeleteModal = closeDeleteModal; window.confirmDelete = confirmDelete; window.setTool = setTool; window.setDrawColor = setDrawColor; window.setHlColor = setHlColor; window.changePage = changePage; window.seekPage = seekPage; window.toggleComplete = toggleComplete; window.closeReader = closeReader; window.undoLast = undoLast; window.clearPage = clearPage; window.toggleHlPanel = toggleHlPanel; window.delHl = delHl;
+
+// ── Expose to global scope ────────────────────────────────────────────────────
+window.navigate = navigate;
+window.toggleSidebar = toggleSidebar;
+window.toggleDark = toggleDark;
+window.handleFiles = handleFiles;
+window.handleSearch = handleSearch;
+window.changeStatus = changeStatus;
+window.openReader = openReader;
+window.askDelete = askDelete;
+window.closeDeleteModal = closeDeleteModal;
+window.confirmDelete = confirmDelete;
+window.setTool = setTool;
+window.setDrawColor = setDrawColor;
+window.setHlColor = setHlColor;
+window.changePage = changePage;
+window.seekPage = seekPage;
+window.toggleComplete = toggleComplete;
+window.closeReader = closeReader;
+window.undoLast = undoLast;
+window.clearPage = clearPage;
+window.toggleHlPanel = toggleHlPanel;
+window.delHl = delHl;
+window.syncLibraryToCloud = syncLibraryToCloud;
+
 init().catch(console.error);
 </script>
 </body>

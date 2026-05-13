@@ -25,8 +25,10 @@ app = Flask(__name__)
 ALLOWED_ORIGINS = {
     "http://localhost:3000",
     "http://127.0.0.1:5500",
-    # Add your Vercel domain once deployed:
-    # "https://readwise-yourname.vercel.app",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://vs-readwise.vercel.app",
+    "https://readwise.vercel.app",
 }
 
 def cors_headers(response):
@@ -34,12 +36,14 @@ def cors_headers(response):
     if origin in ALLOWED_ORIGINS:
         response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
     return response
 
 app.after_request(cors_headers)
 
 @app.route("/api/progress", methods=["OPTIONS"])
+@app.route("/api/books", methods=["OPTIONS"])
+@app.route("/api/books/<book_id>", methods=["OPTIONS"])
 def preflight():
     return jsonify({}), 204
 
@@ -48,37 +52,53 @@ def preflight():
 # STORAGE LAYER  (swap implementations freely)
 # ─────────────────────────────────────────────
 
-def _kv_key(book_id: str) -> str:
+def _kv_key(key: str) -> str:
     """Namespaced Redis key so you can share a single KV store."""
+    return f"readwise:{key}"
+
+def _kv_key_book(book_id: str) -> str:
     return f"readwise:book:{book_id}"
+
+def _kv_key_user_books(user_id: str) -> str:
+    return f"readwise:user:{user_id}:books"
+
+def _kv_key_user_annotations(user_id: str) -> str:
+    return f"readwise:user:{user_id}:annotations"
 
 
 # ── Option A: Vercel KV via upstash-redis ────────────────────────────────────
 try:
     from upstash_redis import Redis as UpstashRedis          # pip install upstash-redis
     _redis = UpstashRedis(
-        url=os.environ["KV_REST_API_URL"],
-        token=os.environ["KV_REST_API_TOKEN"],
+        url=os.environ.get("KV_REST_API_URL", ""),
+        token=os.environ.get("KV_REST_API_TOKEN", ""),
     )
 
-    def storage_get(book_id: str) -> dict | None:
-        raw = _redis.get(_kv_key(book_id))
+    def storage_get(key: str) -> dict | None:
+        raw = _redis.get(key)
         return json.loads(raw) if raw else None
 
-    def storage_set(book_id: str, data: dict) -> None:
-        _redis.set(_kv_key(book_id), json.dumps(data))
+    def storage_set(key: str, data: dict) -> None:
+        _redis.set(key, json.dumps(data))
+        
+    def storage_delete(key: str) -> None:
+        _redis.delete(key)
 
     STORAGE_BACKEND = "vercel-kv"
 
-except (ImportError, KeyError):
+except (ImportError, KeyError, Exception):
     # ── Option C: In-memory fallback (dev / when KV not configured) ──────────
     _mem: dict = {}
 
-    def storage_get(book_id: str) -> dict | None:
-        return _mem.get(book_id)
+    def storage_get(key: str) -> dict | None:
+        return _mem.get(key)
 
-    def storage_set(book_id: str, data: dict) -> None:
-        _mem[book_id] = data
+    def storage_set(key: str, data: dict) -> None:
+        _mem[key] = data
+        
+    def storage_delete(key: str) -> None:
+        if key in _mem:
+            del _mem[key]
 
     STORAGE_BACKEND = "in-memory"
 
@@ -90,20 +110,25 @@ except (ImportError, KeyError):
 # def _pg_conn():
 #     return psycopg2.connect(_pg_url, cursor_factory=psycopg2.extras.RealDictCursor)
 #
-# def storage_get(book_id: str) -> dict | None:
+# def storage_get(key: str) -> dict | None:
 #     with _pg_conn() as conn, conn.cursor() as cur:
-#         cur.execute("SELECT data FROM reading_progress WHERE book_id = %s", (book_id,))
+#         cur.execute("SELECT data FROM kv_store WHERE key = %s", (key,))
 #         row = cur.fetchone()
 #         return row["data"] if row else None
 #
-# def storage_set(book_id: str, data: dict) -> None:
+# def storage_set(key: str, data: dict) -> None:
 #     with _pg_conn() as conn, conn.cursor() as cur:
 #         cur.execute("""
-#             INSERT INTO reading_progress (book_id, data, updated_at)
+#             INSERT INTO kv_store (key, data, updated_at)
 #             VALUES (%s, %s, NOW())
-#             ON CONFLICT (book_id) DO UPDATE
+#             ON CONFLICT (key) DO UPDATE
 #               SET data = EXCLUDED.data, updated_at = NOW()
-#         """, (book_id, json.dumps(data)))
+#         """, (key, json.dumps(data)))
+#         conn.commit()
+#
+# def storage_delete(key: str) -> None:
+#     with _pg_conn() as conn, conn.cursor() as cur:
+#         cur.execute("DELETE FROM kv_store WHERE key = %s", (key,))
 #         conn.commit()
 #
 # STORAGE_BACKEND = "postgres"
@@ -114,13 +139,13 @@ except (ImportError, KeyError):
 # ─────────────────────────────────────────────
 #
 # {
-#   "id":                  "b1715000000001234",   // matches your JS id scheme
+#   "id":                  "b1715000000001234",
 #   "display_name":        "Deep Work",
 #   "total_pages":         304,
 #   "current_page":        47,
-#   "progress_percentage": 15.46,                 // always calculated server-side
-#   "status":              "reading",             // "pending" | "reading" | "completed"
-#   "updated_at":          1715012345678          // epoch ms
+#   "progress_percentage": 15.46,
+#   "status":              "reading",
+#   "updated_at":          1715012345678
 # }
 
 def build_book_record(book_id: str, current_page: int, total_pages: int,
@@ -142,7 +167,7 @@ def build_book_record(book_id: str, current_page: int, total_pages: int,
 
 
 # ─────────────────────────────────────────────
-# ROUTES
+# PROGRESS ROUTES (Individual book progress)
 # ─────────────────────────────────────────────
 
 @app.route("/api/progress", methods=["POST"])
@@ -151,23 +176,15 @@ def update_progress():
     POST /api/progress
     Body (JSON):
       {
-        "book_id":      "b1715000000001234",   required
-        "current_page": 47,                    required
-        "total_pages":  304,                   required
-        "display_name": "Deep Work",           optional
-        "status":       "reading"              optional
-      }
-
-    Returns:
-      {
-        "ok": true,
-        "book": { ...Book record with progress_percentage... },
-        "storage_backend": "vercel-kv"
+        "book_id":      "b1715000000001234",
+        "current_page": 47,
+        "total_pages":  304,
+        "display_name": "Deep Work",
+        "status":       "reading"
       }
     """
     body = request.get_json(silent=True) or {}
 
-    # ── Validate ──────────────────────────────
     book_id      = body.get("book_id", "").strip()
     current_page = body.get("current_page")
     total_pages  = body.get("total_pages")
@@ -185,8 +202,7 @@ def update_progress():
     if errors:
         return jsonify({"ok": False, "errors": errors}), 400
 
-    # ── Merge with existing record ────────────
-    existing  = storage_get(book_id) or {}
+    existing  = storage_get(_kv_key_book(book_id)) or {}
     status    = body.get("status", existing.get("status", "reading"))
     disp_name = body.get("display_name", existing.get("display_name", ""))
 
@@ -198,7 +214,7 @@ def update_progress():
         status=status,
     )
 
-    storage_set(book_id, record)
+    storage_set(_kv_key_book(book_id), record)
 
     return jsonify({
         "ok":              True,
@@ -209,19 +225,134 @@ def update_progress():
 
 @app.route("/api/progress/<book_id>", methods=["GET"])
 def get_progress(book_id: str):
-    """
-    GET /api/progress/<book_id>
-    Returns the stored Book record, or 404 if not found.
-    """
-    record = storage_get(book_id)
+    """GET /api/progress/<book_id> - Returns stored Book record"""
+    record = storage_get(_kv_key_book(book_id))
     if not record:
         return jsonify({"ok": False, "error": "Book not found"}), 404
     return jsonify({"ok": True, "book": record})
 
 
+# ─────────────────────────────────────────────
+# LIBRARY ROUTES (Full user library sync)
+# ─────────────────────────────────────────────
+
+@app.route("/api/books", methods=["POST"])
+def save_books():
+    """
+    POST /api/books
+    Body: { "user_id": "user_xxx", "books": [...], "annotations": {...} }
+    Saves entire library to KV storage (cloud backup)
+    """
+    body = request.get_json(silent=True) or {}
+    
+    user_id = body.get("user_id", "default_user")
+    books_data = body.get("books", [])
+    annotations_data = body.get("annotations", {})
+    
+    if not isinstance(books_data, list):
+        return jsonify({"ok": False, "error": "books must be an array"}), 400
+    
+    try:
+        # Save books list
+        storage_set(_kv_key_user_books(user_id), {"books": books_data, "updated_at": int(time.time() * 1000)})
+        # Save annotations
+        storage_set(_kv_key_user_annotations(user_id), {"annotations": annotations_data, "updated_at": int(time.time() * 1000)})
+        
+        # Also save individual book progress for each book
+        for book in books_data:
+            if book.get("id") and book.get("totalPages"):
+                progress_record = build_book_record(
+                    book_id=book["id"],
+                    current_page=book.get("currentPage", 1),
+                    total_pages=book.get("totalPages", 1),
+                    display_name=book.get("displayName", ""),
+                    status=book.get("status", "reading"),
+                )
+                storage_set(_kv_key_book(book["id"]), progress_record)
+        
+        return jsonify({
+            "ok": True,
+            "message": f"Saved {len(books_data)} books to cloud",
+            "storage_backend": STORAGE_BACKEND
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/books", methods=["GET"])
+def get_books():
+    """
+    GET /api/books?user_id=user_xxx
+    Returns saved library from KV storage
+    """
+    user_id = request.args.get("user_id", "default_user")
+    
+    books_data = storage_get(_kv_key_user_books(user_id))
+    annotations_data = storage_get(_kv_key_user_annotations(user_id))
+    
+    books_list = books_data.get("books", []) if books_data else []
+    annotations_dict = annotations_data.get("annotations", {}) if annotations_data else {}
+    
+    # Also try to get individual book progress and merge
+    for i, book in enumerate(books_list):
+        book_id = book.get("id")
+        if book_id:
+            progress = storage_get(_kv_key_book(book_id))
+            if progress:
+                books_list[i]["currentPage"] = progress.get("current_page", book.get("currentPage", 1))
+                books_list[i]["totalPages"] = progress.get("total_pages", book.get("totalPages", 0))
+                books_list[i]["status"] = progress.get("status", book.get("status", "pending"))
+    
+    return jsonify({
+        "ok": True,
+        "books": books_list,
+        "annotations": annotations_dict,
+        "storage_backend": STORAGE_BACKEND
+    })
+
+
+@app.route("/api/books/<book_id>", methods=["DELETE"])
+def delete_book(book_id):
+    """
+    DELETE /api/books/<book_id>?user_id=user_xxx
+    Removes a book from storage
+    """
+    user_id = request.args.get("user_id", "default_user")
+    
+    try:
+        # Get current books
+        books_data = storage_get(_kv_key_user_books(user_id))
+        books_list = books_data.get("books", []) if books_data else []
+        
+        # Remove book
+        books_list = [b for b in books_list if b.get("id") != book_id]
+        
+        # Also remove its annotations
+        annotations_data = storage_get(_kv_key_user_annotations(user_id))
+        annotations_dict = annotations_data.get("annotations", {}) if annotations_data else {}
+        if book_id in annotations_dict:
+            del annotations_dict[book_id]
+        
+        # Remove individual progress
+        storage_delete(_kv_key_book(book_id))
+        
+        # Save back
+        storage_set(_kv_key_user_books(user_id), {"books": books_list, "updated_at": int(time.time() * 1000)})
+        storage_set(_kv_key_user_annotations(user_id), {"annotations": annotations_dict, "updated_at": int(time.time() * 1000)})
+        
+        return jsonify({"ok": True, "message": "Book deleted from cloud"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"ok": True, "storage_backend": STORAGE_BACKEND})
+    """Health check endpoint"""
+    return jsonify({
+        "ok": True,
+        "storage_backend": STORAGE_BACKEND,
+        "status": "running"
+    })
 
 
 # ─────────────────────────────────────────────

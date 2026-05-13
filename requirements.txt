@@ -1,0 +1,12 @@
+# Readwise — Python backend dependencies
+# Vercel installs these automatically from requirements.txt at build time.
+
+flask>=3.0.0
+
+# ── Storage (uncomment the backend you chose in api/progress.py) ──────────────
+
+# Option A: Vercel KV (Upstash Redis)
+upstash-redis>=1.0.0
+
+# Option B: Vercel Postgres
+# psycopg2-binary>=2.9.0

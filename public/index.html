@@ -1,6 +1,233 @@
-<script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Readwise — Your Personal Library</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root {
+  --green:#2d6a4f;--green-light:#52b788;--green-pale:#d8f3dc;--green-mid:#74c69d;--accent:#1b4332;
+  --bg:#f9fafb;--surface:#ffffff;--surface2:#f0faf4;--border:#e2ede7;
+  --text:#1a2e22;--text-muted:#6b8f76;--text-faint:#a8c4b0;
+  --shadow:0 2px 16px rgba(45,106,79,.08);--shadow-lg:0 8px 40px rgba(45,106,79,.13);
+  --radius:14px;--radius-sm:8px;--tr:.22s cubic-bezier(.4,0,.2,1);
+}
+[data-theme="dark"] {
+  --bg:#0d1f16;--surface:#152a1e;--surface2:#1a3326;--border:#243d2e;
+  --text:#e8f5ec;--text-muted:#7aad8a;--text-faint:#3a6649;
+  --shadow:0 2px 16px rgba(0,0,0,.35);--shadow-lg:0 8px 40px rgba(0,0,0,.45);
+  --green-pale:#1e3d2a;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background var(--tr),color var(--tr);}
+.app{display:flex;min-height:100vh;}
+.sidebar{width:240px;min-width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;transition:background var(--tr),border-color var(--tr),transform var(--tr);}
+.main{margin-left:240px;flex:1;display:flex;flex-direction:column;min-height:100vh;}
+.logo{padding:26px 22px 18px;border-bottom:1px solid var(--border);}
+.logo-title{font-family:'Playfair Display',serif;font-size:1.45rem;font-weight:700;color:var(--green);display:flex;align-items:center;gap:8px;}
+.logo-sub{font-size:.68rem;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.nav{padding:14px 10px;flex:1;}
+.nav-label{font-size:.63rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:2px;padding:0 12px;margin:12px 0 5px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:8px;cursor:pointer;color:var(--text-muted);font-size:.875rem;font-weight:500;transition:all var(--tr);margin-bottom:2px;}
+.nav-item:hover{background:var(--green-pale);color:var(--green);}
+.nav-item.active{background:var(--green-pale);color:var(--green);font-weight:600;}
+.nav-item svg{width:16px;height:16px;}
+.stats-mini{padding:14px;border-top:1px solid var(--border);}
+.stats-row{display:flex;gap:7px;}
+.stat-chip{flex:1;background:var(--green-pale);border-radius:8px;padding:9px 7px;text-align:center;}
+.stat-chip .num{font-size:1.15rem;font-weight:700;color:var(--green);font-family:'Playfair Display',serif;}
+.stat-chip .lbl{font-size:.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:50;}
+.topbar-title{font-family:'Playfair Display',serif;font-size:1.25rem;font-weight:600;flex:1;}
+.search-wrap{position:relative;flex:1;max-width:340px;}
+.search-input{width:100%;padding:8px 13px 8px 36px;border:1.5px solid var(--border);border-radius:40px;background:var(--bg);color:var(--text);font-size:.83rem;outline:none;}
+.search-input:focus{border-color:var(--green-light);background:var(--surface);}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-faint);width:14px;height:14px;}
+.btn-icon{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);}
+.btn-icon:hover{border-color:var(--green-light);color:var(--green);background:var(--green-pale);}
+.content{padding:28px;flex:1;}
+.page{display:none;}
+.page.active{display:block;}
+.upload-zone{border:2px dashed var(--green-mid);border-radius:14px;padding:36px 28px;text-align:center;cursor:pointer;background:var(--surface);transition:all var(--tr);margin-bottom:26px;position:relative;}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--green);background:var(--green-pale);}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.upload-icon{font-size:2rem;margin-bottom:8px;}
+.upload-title{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;color:var(--green);margin-bottom:4px;}
+.upload-sub{font-size:.8rem;color:var(--text-muted);}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.section-title{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;}
+.section-count{font-size:.76rem;color:var(--text-muted);background:var(--green-pale);padding:2px 9px;border-radius:20px;}
+.section-divider{height:1px;background:var(--border);margin:20px 0;}
+.books-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:6px;}
+.book-card{background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);cursor:pointer;transition:all var(--tr);border:1.5px solid var(--border);}
+.book-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:var(--green-light);}
+.book-cover{height:160px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+.book-cover img{width:100%;height:100%;object-fit:cover;}
+.book-badge{position:absolute;top:7px;right:7px;font-size:.58rem;font-weight:600;text-transform:uppercase;padding:3px 7px;border-radius:20px;}
+.badge-pending{background:#fff3cd;color:#856404;}
+.badge-reading{background:var(--green);color:white;}
+.badge-completed{background:var(--green-light);color:white;}
+[data-theme="dark"] .badge-pending{background:#3d3000;color:#ffc107;}
+.book-body{padding:11px 13px;}
+.book-title{font-weight:600;font-size:.84rem;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.book-size{font-size:.68rem;color:var(--text-muted);margin-bottom:7px;}
+.status-select{font-size:.67rem;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);border-radius:6px;padding:3px 5px;cursor:pointer;width:100%;margin-bottom:6px;}
+.progress-bar-wrap{background:var(--border);border-radius:20px;height:4px;margin-bottom:6px;}
+.progress-bar{height:4px;border-radius:20px;background:linear-gradient(90deg,var(--green-light),var(--green));transition:width .4s;}
+.book-meta{display:flex;align-items:center;justify-content:space-between;}
+.book-progress-text{font-size:.68rem;color:var(--text-muted);}
+.book-actions{display:flex;gap:3px;}
+.action-btn{width:25px;height:25px;border-radius:6px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.action-btn.read{background:var(--green-pale);color:var(--green);}
+.action-btn.read:hover{background:var(--green);color:white;}
+.action-btn.del{background:#fff0f0;color:#cc3333;}
+.action-btn.del:hover{background:#cc3333;color:white;}
+.empty-state{text-align:center;padding:36px 20px;color:var(--text-muted);}
+.reader-page{display:none;flex-direction:column;position:fixed;inset:0;z-index:200;background:var(--bg);}
+.reader-page.active{display:flex;}
+.reader-header{background:var(--surface);border-bottom:1px solid var(--border);padding:9px 18px;display:flex;align-items:center;gap:10px;}
+.reader-title{font-family:'Playfair Display',serif;font-weight:600;font-size:.92rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.reader-controls{display:flex;align-items:center;gap:5px;}
+.ctrl-btn{padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:.76rem;display:flex;align-items:center;gap:4px;}
+.ctrl-btn:hover:not(:disabled){border-color:var(--green);color:var(--green);background:var(--green-pale);}
+.ctrl-btn:disabled{opacity:.35;cursor:default;}
+.ctrl-btn.primary{background:var(--green);color:white;border-color:var(--green);}
+.page-indicator{font-size:.76rem;color:var(--text-muted);}
+.reader-toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:6px 18px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.tool-sep{width:1px;height:26px;background:var(--border);margin:0 4px;}
+.tool-btn{width:32px;height:32px;border-radius:7px;border:1.5px solid transparent;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);}
+.tool-btn:hover{background:var(--green-pale);border-color:var(--green-light);color:var(--green);}
+.tool-btn.active{background:var(--green-pale);border-color:var(--green);color:var(--green);}
+.tb-label{font-size:.67rem;color:var(--text-muted);margin:0 3px;}
+.color-dot{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+.color-dot.sel{border-color:var(--text);transform:scale(1.18);}
+.hl-dot{width:19px;height:19px;border-radius:4px;cursor:pointer;border:2px solid transparent;}
+.hl-dot.sel{border-color:var(--text);transform:scale(1.18);}
+.sz-wrap{display:flex;align-items:center;gap:5px;}
+.sz-slider{width:65px;height:3px;background:var(--border);cursor:pointer;}
+.reader-body{flex:1;overflow:hidden;position:relative;display:flex;}
+.canvas-scroll{flex:1;overflow:auto;display:flex;justify-content:center;padding:24px;background:#6b6b6b;}
+[data-theme="dark"] .canvas-scroll{background:#111;}
+.canvas-stack{position:relative;display:inline-block;box-shadow:0 4px 36px rgba(0,0,0,.45);}
+#pdfCanvas{display:block;}
+#hlCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:2;}
+#hlCanvas.hl-active{pointer-events:all;cursor:crosshair;}
+#drawCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:3;}
+#drawCanvas.draw-active{pointer-events:all;cursor:crosshair;}
+#drawCanvas.erase-active{pointer-events:all;cursor:cell;}
+.hl-panel{position:absolute;right:0;top:0;bottom:0;width:275px;background:var(--surface);border-left:1px solid var(--border);z-index:10;display:none;flex-direction:column;}
+.hl-panel.open{display:flex;}
+.hlp-header{padding:13px 15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;}
+.hlp-title{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;}
+.hl-scroll{overflow-y:auto;flex:1;padding:10px;}
+.hl-item{border-radius:8px;padding:9px 11px;margin-bottom:7px;background:var(--surface2);font-size:.78rem;border-left:3px solid;position:relative;}
+.hl-pg{font-size:.63rem;color:var(--text-muted);margin-top:3px;}
+.hl-del-btn{position:absolute;top:5px;right:5px;background:none;border:none;cursor:pointer;opacity:0;}
+.hl-item:hover .hl-del-btn{opacity:1;}
+.reader-footer{background:var(--surface);border-top:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:12px;}
+.r-prog-wrap{flex:1;background:var(--border);border-radius:20px;height:5px;cursor:pointer;}
+.r-prog-bar{height:5px;border-radius:20px;background:linear-gradient(90deg,var(--green-light),var(--green));}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:16px;margin-bottom:26px;}
+.stat-card{background:var(--surface);border-radius:14px;padding:20px;border:1.5px solid var(--border);text-align:center;}
+.stat-card .big-num{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:700;color:var(--green);}
+.books-list{display:flex;flex-direction:column;gap:9px;}
+.book-list-row{background:var(--surface);border-radius:8px;padding:12px 15px;border:1.5px solid var(--border);display:flex;align-items:center;gap:11px;}
+.list-info{flex:1;}
+.list-title{font-weight:600;font-size:.84rem;}
+.list-sub{font-size:.7rem;color:var(--text-muted);}
+.list-pct{font-weight:700;color:var(--green);}
+.list-bar-wrap{width:85px;background:var(--border);border-radius:20px;height:3px;}
+.list-bar{height:3px;border-radius:20px;background:linear-gradient(90deg,var(--green-light),var(--green));}
+.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:1000;}
+.loading-overlay.show{display:flex;}
+.loading-card{background:var(--surface);border-radius:14px;padding:26px 34px;text-align:center;}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 11px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.toast-wrap{position:fixed;bottom:22px;right:22px;z-index:2000;display:flex;flex-direction:column;gap:7px;}
+.toast{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:10px 15px;font-size:.82rem;animation:tIn .28s ease;}
+.toast.success{border-left:3px solid var(--green);}
+.toast.error{border-left:3px solid #e05;}
+@keyframes tIn{from{transform:translateX(36px);opacity:0;}to{transform:none;opacity:1;}}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:500;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--surface);border-radius:14px;padding:24px;max-width:350px;width:90%;}
+.modal h3{font-family:'Playfair Display',serif;margin-bottom:7px;}
+.modal-btns{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;}
+.btn{padding:8px 17px;border-radius:8px;border:none;font-weight:600;cursor:pointer;}
+.btn-secondary{background:var(--border);color:var(--text);}
+.btn-danger{background:#cc3333;color:white;}
+.mobile-header{display:none;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;display:none;}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);}
+  .sidebar.open{transform:none;}
+  .main{margin-left:0;}
+  .mobile-header{display:flex;align-items:center;gap:12px;padding:11px 16px;background:var(--surface);border-bottom:1px solid var(--border);}
+  .topbar{display:none;}
+  .content{padding:16px;}
+  .books-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));}
+  .hl-panel{width:100%;top:auto;bottom:0;height:48%;border-top:1px solid var(--border);}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar" id="sidebar">
+  <div class="logo"><div class="logo-title">🌿 Readwise</div><div class="logo-sub">Personal Library</div></div>
+  <nav class="nav">
+    <div class="nav-label">Browse</div>
+    <div class="nav-item active" data-page="library" onclick="navigate('library')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Library</div>
+    <div class="nav-item" data-page="stats" onclick="navigate('stats')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Stats</div>
+  </nav>
+  <div class="stats-mini"><div class="stats-row"><div class="stat-chip"><div class="num" id="sbTotal">0</div><div class="lbl">Books</div></div><div class="stat-chip"><div class="num" id="sbDone">0</div><div class="lbl">Done</div></div></div></div>
+</aside>
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<main class="main">
+  <div class="mobile-header"><button class="btn-icon" onclick="toggleSidebar()">☰</button><span class="mobile-logo">🌿 Readwise</span><button class="btn-icon" onclick="toggleDark()"><span id="mThemeIcon">🌙</span></button></div>
+  <div class="topbar"><div class="topbar-title" id="topbarTitle">Library</div><div class="search-wrap"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input class="search-input" id="searchInput" placeholder="Search books…" oninput="handleSearch()"/></div><button class="btn-icon" onclick="toggleDark()"><span id="themeIcon">🌙</span></button></div>
+  <div class="content">
+    <div class="page active" id="libraryPage">
+      <div class="upload-zone" id="uploadZone"><input type="file" accept=".pdf" multiple onchange="handleFiles(this.files)"/><div class="upload-icon">📖</div><div class="upload-title">Drop PDFs here to add books</div><div class="upload-sub">Click to browse · multiple files supported</div></div>
+      <div id="pendingSection"><div class="section-header"><div class="section-title">🕐 Pending to Read</div><div class="section-count" id="pendingCount">0</div></div><div class="books-grid" id="pendingGrid"></div><div class="section-divider"></div></div>
+      <div id="readingSection"><div class="section-header"><div class="section-title">📖 In Progress</div><div class="section-count" id="readingCount">0</div></div><div class="books-grid" id="readingGrid"></div><div class="section-divider"></div></div>
+      <div id="completedSection"><div class="section-header"><div class="section-title">✅ Completed</div><div class="section-count" id="completedCount">0</div></div><div class="books-grid" id="completedGrid"></div></div>
+      <div class="empty-state" id="emptyState" style="display:none;"><div class="icon">📚</div><p>Library is empty. Upload a PDF to begin!</p></div>
+    </div>
+    <div class="page" id="statsPage"><div class="stats-grid" id="statsGrid"></div><div class="section-header"><div class="section-title">All Books</div></div><div class="books-list" id="statsList"></div></div>
+  </div>
+</main>
+</div>
+<div class="reader-page" id="readerPage">
+  <div class="reader-header"><button class="ctrl-btn" onclick="closeReader()">← Library</button><span class="reader-title" id="readerTitle">—</span><div class="reader-controls"><button class="ctrl-btn" id="prevBtn" onclick="changePage(-1)" disabled>‹ Prev</button><span class="page-indicator" id="pageIndicator">1 / 1</span><button class="ctrl-btn" id="nextBtn" onclick="changePage(1)">Next ›</button><button class="ctrl-btn primary" id="completeBtn" onclick="toggleComplete()">Mark Complete</button><button class="ctrl-btn" id="hlPanelBtn" onclick="toggleHlPanel()">✎ Highlights</button></div></div>
+  <div class="reader-toolbar" id="readerToolbar">
+    <button class="tool-btn active" id="tbSelect" onclick="setTool('select')">▽</button>
+    <button class="tool-btn" id="tbPencil" onclick="setTool('pencil')">✏️</button>
+    <button class="tool-btn" id="tbEraser" onclick="setTool('eraser')">⌫</button>
+    <button class="tool-btn" id="tbHighlight" onclick="setTool('highlight')">🖍️</button>
+    <div class="tool-sep"></div>
+    <div id="grpDrawColors" style="display:flex;gap:4px;"><span class="tb-label">Color</span><div class="color-dot sel" style="background:#2d6a4f" data-c="#2d6a4f" onclick="setDrawColor(this)"></div><div class="color-dot" style="background:#e63946" data-c="#e63946" onclick="setDrawColor(this)"></div><div class="color-dot" style="background:#1d3557" data-c="#1d3557" onclick="setDrawColor(this)"></div><div class="color-dot" style="background:#e9c46a" data-c="#e9c46a" onclick="setDrawColor(this)"></div><div class="sz-wrap"><span class="tb-label">Size</span><input type="range" class="sz-slider" id="brushSlider" min="1" max="18" value="3" oninput="brushSize=+this.value;document.getElementById('brushLbl').textContent=this.value"><span class="sz-label" id="brushLbl">3</span></div></div>
+    <div id="grpHlColors" style="display:none;gap:4px;"><span class="tb-label">Color</span><div class="hl-dot sel" style="background:#ffff0099" data-c="#ffff0099" onclick="setHlColor(this)"></div><div class="hl-dot" style="background:#90ee9088" data-c="#90ee9088" onclick="setHlColor(this)"></div><div class="hl-dot" style="background:#87ceeb88" data-c="#87ceeb88" onclick="setHlColor(this)"></div><div class="hl-dot" style="background:#ffb6c188" data-c="#ffb6c188" onclick="setHlColor(this)"></div></div>
+    <div id="grpEraserSize" style="display:none;gap:4px;"><span class="tb-label">Eraser</span><input type="range" class="sz-slider" id="eraserSlider" min="5" max="60" value="20" oninput="eraserSize=+this.value;document.getElementById('eraserLbl').textContent=this.value"><span class="sz-label" id="eraserLbl">20</span></div>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" onclick="undoLast()">↩️</button>
+    <button class="tool-btn" onclick="clearPage()">🗑️</button>
+  </div>
+  <div class="reader-body"><div class="canvas-scroll" id="canvasScroll"><div class="canvas-stack"><canvas id="pdfCanvas"></canvas><canvas id="hlCanvas"></canvas><canvas id="drawCanvas"></canvas></div></div><div class="hl-panel" id="hlPanel"><div class="hlp-header"><div class="hlp-title">Highlights</div><button class="hlp-close" onclick="toggleHlPanel()">✕</button></div><div class="hl-scroll" id="hlScroll"></div></div></div>
+  <div class="reader-footer"><span id="footerPct">0%</span><div class="r-prog-wrap" onclick="seekPage(event)"><div class="r-prog-bar" id="rProgBar"></div></div><span>100%</span></div>
+</div>
+<div class="loading-overlay" id="loadingOverlay"><div class="loading-card"><div class="spinner"></div><div class="loading-text">Loading PDF…</div></div></div>
+<div class="modal-overlay" id="deleteModal"><div class="modal"><h3>Remove Book?</h3><p>This will permanently remove the book, all highlights, and drawings.</p><div class="modal-btns"><button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelete()">Remove</button></div></div></div>
+<div class="toast-wrap" id="toastWrap"></div>
 
+<script>
+// Ensure pdfjs worker is set after library loads
+if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// global state
 let books = [], annotations = {};
 let readerBookId = null, pdfDoc = null, pageNum = 1;
 let rendering = false, pendingPage = null, deleteTargetId = null, searchQuery = '';
@@ -10,33 +237,7 @@ let lx = 0, ly = 0;
 let currentStrokes = [], currentHlRects = [], activeStroke = [];
 let hlStart = null, hlDragging = false;
 
-// ========== MIGRATION: Clear old localStorage data ==========
-function migrateFromLocalStorage() {
-    if (localStorage.getItem('rw_migrated_v3')) return;
-    
-    const oldBooks = localStorage.getItem('rw_books_v3');
-    const oldAnn = localStorage.getItem('rw_ann');
-    
-    if (oldBooks || oldAnn) {
-        console.log('Migrating old library data...');
-        // Clear old storage
-        localStorage.removeItem('rw_books_v3');
-        localStorage.removeItem('rw_ann');
-        localStorage.removeItem('rw_books_v2');
-        localStorage.removeItem('rw_ann_v2');
-    }
-    
-    localStorage.setItem('rw_migrated_v3', 'true');
-    
-    if (oldBooks || oldAnn) {
-        toast('Storage upgraded! Page will refresh.', 'success');
-        setTimeout(() => location.reload(), 1500);
-        return true;
-    }
-    return false;
-}
-
-// ========== INDEXEDDB STORAGE ==========
+// ---------- IndexedDB (unlimited storage) ----------
 let dbPromise = null;
 function openDB() {
     if (dbPromise) return dbPromise;
@@ -46,66 +247,40 @@ function openDB() {
         req.onsuccess = () => resolve(req.result);
         req.onupgradeneeded = (e) => {
             const db = e.target.result;
-            if (!db.objectStoreNames.contains('books')) {
-                db.createObjectStore('books', { keyPath: 'id' });
-            }
-            if (!db.objectStoreNames.contains('annotations')) {
-                db.createObjectStore('annotations', { keyPath: 'id' });
-            }
+            if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('annotations')) db.createObjectStore('annotations', { keyPath: 'id' });
         };
     });
     return dbPromise;
 }
+async function saveBooks() { try { const db = await openDB(); const tx = db.transaction('books', 'readwrite'); const store = tx.objectStore('books'); for (const b of books) store.put(b); await tx.done; } catch(e) { console.warn(e); toast('Save failed', 'error'); } }
+async function loadBooks() { try { const db = await openDB(); const tx = db.transaction('books', 'readonly'); const all = await tx.objectStore('books').getAll(); if (all.length) books = all; } catch(e) { console.warn(e); } }
+async function saveAnn() { try { const db = await openDB(); const tx = db.transaction('annotations', 'readwrite'); await tx.objectStore('annotations').put({ id: 'main', data: annotations }); await tx.done; } catch(e) { console.warn(e); } }
+async function loadAnn() { try { const db = await openDB(); const record = await db.transaction('annotations').objectStore('annotations').get('main'); if (record && record.data) annotations = record.data; } catch(e) { console.warn(e); } }
 
-async function saveBooks() {
-    try {
-        const db = await openDB();
-        const tx = db.transaction('books', 'readwrite');
-        const store = tx.objectStore('books');
-        for (const b of books) store.put(b);
-        await tx.done;
-    } catch(e) { console.warn(e); toast('Save failed', 'error'); }
+function migrateFromLocalStorage() {
+    if (localStorage.getItem('rw_migrated_v3')) return false;
+    const oldBooks = localStorage.getItem('rw_books_v3');
+    const oldAnn = localStorage.getItem('rw_ann');
+    if (oldBooks || oldAnn) {
+        localStorage.removeItem('rw_books_v3');
+        localStorage.removeItem('rw_ann');
+        localStorage.removeItem('rw_books_v2');
+        localStorage.removeItem('rw_ann_v2');
+    }
+    localStorage.setItem('rw_migrated_v3', 'true');
+    if (oldBooks || oldAnn) {
+        toast('Storage upgraded! Page will refresh.', 'success');
+        setTimeout(() => location.reload(), 1500);
+        return true;
+    }
+    return false;
 }
 
-async function loadBooks() {
-    try {
-        const db = await openDB();
-        const tx = db.transaction('books', 'readonly');
-        const store = tx.objectStore('books');
-        const all = await store.getAll();
-        if (all.length) books = all;
-    } catch(e) { console.warn(e); }
-}
-
-async function saveAnn() {
-    try {
-        const db = await openDB();
-        const tx = db.transaction('annotations', 'readwrite');
-        const store = tx.objectStore('annotations');
-        store.put({ id: 'main', data: annotations });
-        await tx.done;
-    } catch(e) { console.warn(e); }
-}
-
-async function loadAnn() {
-    try {
-        const db = await openDB();
-        const tx = db.transaction('annotations', 'readonly');
-        const store = tx.objectStore('annotations');
-        const record = await store.get('main');
-        if (record && record.data) annotations = record.data;
-    } catch(e) { console.warn(e); }
-}
-
-// ========== INIT ==========
 async function init() {
-    // First, clear any old localStorage data
-    const migrated = migrateFromLocalStorage();
-    if (migrated) return; // Page will reload
-    
+    if (migrateFromLocalStorage()) return;
     await loadBooks();
     await loadAnn();
-    
     const th = localStorage.getItem('rw_theme') || 'light';
     document.documentElement.setAttribute('data-theme', th);
     updateThemeIcon(th);
@@ -118,163 +293,45 @@ async function init() {
 // Helper functions
 function toast(msg, type = 'success') {
     const w = document.getElementById('toastWrap');
+    if (!w) return;
     const t = document.createElement('div');
     t.className = 'toast ' + type;
     t.textContent = msg;
     w.appendChild(t);
-    setTimeout(() => {
-        t.style.opacity = '0';
-        setTimeout(() => t.remove(), 300);
-    }, 2500);
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
 }
-
 function toggleDark() {
     const n = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', n);
     localStorage.setItem('rw_theme', n);
     updateThemeIcon(n);
 }
-
-function updateThemeIcon(t) {
-    const moon = '🌙', sun = '☀️';
-    const ic = t === 'dark' ? sun : moon;
-    const themeIcon = document.getElementById('themeIcon');
-    const mThemeIcon = document.getElementById('mThemeIcon');
-    if (themeIcon) themeIcon.innerHTML = ic;
-    if (mThemeIcon) mThemeIcon.innerHTML = ic;
-}
-
-function navigate(page) {
-    document.querySelectorAll('[data-page]').forEach(n => n.classList.remove('active'));
-    document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
-    document.getElementById('topbarTitle').innerText = page === 'library' ? 'Library' : 'Reading Stats';
-    const searchWrap = document.getElementById('searchWrap');
-    if (searchWrap) searchWrap.style.display = page === 'library' ? '' : 'none';
-    document.querySelectorAll('.content .page').forEach(p => p.classList.remove('active'));
-    if (page === 'library') {
-        document.getElementById('libraryPage').classList.add('active');
-        renderLibrary();
-    } else if (page === 'stats') {
-        document.getElementById('statsPage').classList.add('active');
-        renderStats();
-    }
-    closeSidebar();
-}
-
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-    document.getElementById('overlay').classList.toggle('show');
-}
-
-function closeSidebar() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('overlay').classList.remove('show');
-}
-
-function setupDragDrop() {
-    const z = document.getElementById('uploadZone');
-    if (!z) return;
-    z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('drag-over'); });
-    z.addEventListener('dragleave', () => z.classList.remove('drag-over'));
-    z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
-}
-
+function updateThemeIcon(t) { const icon = t === 'dark' ? '☀️' : '🌙'; const ti = document.getElementById('themeIcon'); if (ti) ti.innerHTML = icon; const mi = document.getElementById('mThemeIcon'); if (mi) mi.innerHTML = icon; }
+function navigate(page) { /* same as before */ document.querySelectorAll('[data-page]').forEach(n => n.classList.remove('active')); const nav = document.querySelector(`[data-page="${page}"]`); if (nav) nav.classList.add('active'); const title = document.getElementById('topbarTitle'); if (title) title.innerText = page === 'library' ? 'Library' : 'Reading Stats'; const sw = document.getElementById('searchWrap'); if (sw) sw.style.display = page === 'library' ? '' : 'none'; document.querySelectorAll('.content .page').forEach(p => p.classList.remove('active')); if (page === 'library') { const lib = document.getElementById('libraryPage'); if (lib) lib.classList.add('active'); renderLibrary(); } else if (page === 'stats') { const stats = document.getElementById('statsPage'); if (stats) stats.classList.add('active'); renderStats(); } closeSidebar(); }
+function toggleSidebar() { const s = document.getElementById('sidebar'); const o = document.getElementById('overlay'); if (s) s.classList.toggle('open'); if (o) o.classList.toggle('show'); }
+function closeSidebar() { const s = document.getElementById('sidebar'); const o = document.getElementById('overlay'); if (s) s.classList.remove('open'); if (o) o.classList.remove('show'); }
+function setupDragDrop() { const z = document.getElementById('uploadZone'); if (!z) return; z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('drag-over'); }); z.addEventListener('dragleave', () => z.classList.remove('drag-over')); z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); }); }
 function fmtSize(b) { return b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
-
-function handleFiles(files) {
-    [...files].forEach(f => {
-        if (f.type !== 'application/pdf') { toast(f.name + ' is not a PDF', 'error'); return; }
-        if (books.find(b => b.name === f.name)) { toast('"' + f.name + '" already exists', 'error'); return; }
-        const reader = new FileReader();
-        reader.onload = e => {
-            const id = 'b' + Date.now() + Math.floor(Math.random() * 9999);
-            const b = {
-                id, name: f.name, displayName: f.name.replace('.pdf', '').replace(/_/g, ' '),
-                size: fmtSize(f.size), dataUrl: e.target.result, totalPages: 0,
-                currentPage: 1, status: 'pending', addedAt: Date.now(), cover: null
-            };
-            books.push(b);
-            pdfjsLib.getDocument(e.target.result).promise.then(pdf => {
-                b.totalPages = pdf.numPages;
-                pdf.getPage(1).then(pg => {
-                    const vp = pg.getViewport({ scale: 0.5 });
-                    const c = document.createElement('canvas');
-                    c.width = vp.width; c.height = vp.height;
-                    pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(() => {
-                        b.cover = c.toDataURL('image/jpeg', 0.65);
-                        saveBooks(); renderLibrary(); updateSidebar();
-                    });
-                });
-                saveBooks(); renderLibrary(); updateSidebar();
-            }).catch(() => { saveBooks(); renderLibrary(); updateSidebar(); });
-            toast('📖 "' + b.displayName + '" added!', 'success');
-        };
-        reader.readAsDataURL(f);
-    });
-}
-
+function handleFiles(files) { [...files].forEach(f => { if (f.type !== 'application/pdf') { toast(f.name + ' is not a PDF', 'error'); return; } if (books.find(b => b.name === f.name)) { toast('"' + f.name + '" already exists', 'error'); return; } const reader = new FileReader(); reader.onload = e => { const id = 'b' + Date.now() + Math.floor(Math.random() * 9999); const b = { id, name: f.name, displayName: f.name.replace('.pdf', '').replace(/_/g, ' '), size: fmtSize(f.size), dataUrl: e.target.result, totalPages: 0, currentPage: 1, status: 'pending', addedAt: Date.now(), cover: null }; books.push(b); if (typeof pdfjsLib !== 'undefined') { pdfjsLib.getDocument(e.target.result).promise.then(pdf => { b.totalPages = pdf.numPages; pdf.getPage(1).then(pg => { const vp = pg.getViewport({ scale: 0.5 }); const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(() => { b.cover = c.toDataURL('image/jpeg', 0.65); saveBooks(); renderLibrary(); updateSidebar(); }); }); saveBooks(); renderLibrary(); updateSidebar(); }).catch(() => { saveBooks(); renderLibrary(); updateSidebar(); }); } else { saveBooks(); renderLibrary(); updateSidebar(); } toast('📖 "' + b.displayName + '" added!', 'success'); }; reader.readAsDataURL(f); }); }
 function handleSearch() { searchQuery = document.getElementById('searchInput').value.toLowerCase(); renderLibrary(); }
-
-function bookCard(b) {
-    const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0;
-    const ems = ['📘', '📗', '📙', '📕', '📓', '📔'];
-    const em = ems[Math.abs(b.name.length * 3) % 6];
-    const coverHtml = b.cover ? `<img src="${b.cover}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,#2d6a4f22,#52b78855);display:flex;align-items:center;justify-content:center;font-size:2.8rem;">${em}</div>`;
-    const badgeCls = b.status === 'pending' ? 'badge-pending' : b.status === 'reading' ? 'badge-reading' : 'badge-completed';
-    const badgeTx = b.status === 'pending' ? '🕐 Pending' : b.status === 'reading' ? '📖 Reading' : '✅ Done';
-    const hlN = getHlCount(b.id);
-    return `<div class="book-card" data-book-id="${b.id}">
-        <div class="book-cover">${coverHtml}<div class="book-badge ${badgeCls}">${badgeTx}</div></div>
-        <div class="book-body">
-            <div class="book-title">${b.displayName}</div>
-            <div class="book-size">${b.size}${b.totalPages ? ' · ' + b.totalPages + ' pp' : ''}${hlN ? ' · 🖊' + hlN : ''}</div>
-            <select class="status-select" onchange="changeStatus('${b.id}',this.value)" onclick="event.stopPropagation()">
-                <option value="pending" ${b.status === 'pending' ? 'selected' : ''}>🕐 Pending</option>
-                <option value="reading" ${b.status === 'reading' ? 'selected' : ''}>📖 Reading</option>
-                <option value="completed" ${b.status === 'completed' ? 'selected' : ''}>✅ Completed</option>
-            </select>
-            <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
-            <div class="book-meta">
-                <div class="book-progress-text">p.${b.currentPage}${b.totalPages ? ' / ' + b.totalPages : ''} · ${pct}%</div>
-                <div class="book-actions">
-                    <button class="action-btn read" onclick="openReader('${b.id}')">▶</button>
-                    <button class="action-btn del" onclick="askDelete('${b.id}')">🗑</button>
-                </div>
-            </div>
-        </div>
-    </div>`;
-}
-
-function renderLibrary() {
-    const flt = books.filter(b => b.displayName.toLowerCase().includes(searchQuery) || b.name.toLowerCase().includes(searchQuery));
-    const grps = { pending: flt.filter(b => b.status === 'pending'), reading: flt.filter(b => b.status === 'reading'), completed: flt.filter(b => b.status === 'completed') };
-    ['pending', 'reading', 'completed'].forEach(s => {
-        const grid = document.getElementById(s === 'reading' ? 'readingGrid' : s + 'Grid');
-        const count = document.getElementById(s === 'reading' ? 'readingCount' : s + 'Count');
-        const sect = document.getElementById(s === 'reading' ? 'readingSection' : s + 'Section');
-        if (count) count.textContent = grps[s].length + ' book' + (grps[s].length !== 1 ? 's' : '');
-        if (sect) sect.style.display = grps[s].length ? '' : 'none';
-        if (grid) grid.innerHTML = grps[s].map(bookCard).join('');
-    });
-    const emptyState = document.getElementById('emptyState');
-    if (emptyState) emptyState.style.display = flt.length === 0 ? 'block' : 'none';
-}
-
-function changeStatus(id, status) { const b = books.find(b => b.id === id); if (!b) return; b.status = status; saveBooks(); renderLibrary(); updateSidebar(); }
+function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+function bookCard(b) { const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0; const ems = ['📘', '📗', '📙', '📕', '📓', '📔']; const em = ems[Math.abs(b.name.length * 3) % 6]; const coverHtml = b.cover ? `<img src="${b.cover}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,#2d6a4f22,#52b78855);display:flex;align-items:center;justify-content:center;font-size:2.8rem;">${em}</div>`; const badgeCls = b.status === 'pending' ? 'badge-pending' : b.status === 'reading' ? 'badge-reading' : 'badge-completed'; const badgeTx = b.status === 'pending' ? '🕐 Pending' : b.status === 'reading' ? '📖 Reading' : '✅ Done'; const hlN = getHlCount(b.id); return `<div class="book-card" data-book-id="${b.id}"><div class="book-cover">${coverHtml}<div class="book-badge ${badgeCls}">${badgeTx}</div></div><div class="book-body"><div class="book-title">${escapeHtml(b.displayName)}</div><div class="book-size">${b.size}${b.totalPages ? ' · ' + b.totalPages + ' pp' : ''}${hlN ? ' · 🖊' + hlN : ''}</div><select class="status-select" onchange="changeStatus('${b.id}',this.value)" onclick="event.stopPropagation()"><option value="pending" ${b.status === 'pending' ? 'selected' : ''}>🕐 Pending</option><option value="reading" ${b.status === 'reading' ? 'selected' : ''}>📖 Reading</option><option value="completed" ${b.status === 'completed' ? 'selected' : ''}>✅ Completed</option></select><div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div><div class="book-meta"><div class="book-progress-text">p.${b.currentPage}${b.totalPages ? ' / ' + b.totalPages : ''} · ${pct}%</div><div class="book-actions"><button class="action-btn read" onclick="openReader('${b.id}')">▶</button><button class="action-btn del" onclick="askDelete('${b.id}')">🗑</button></div></div></div></div>`; }
+function renderLibrary() { const flt = books.filter(b => b.displayName.toLowerCase().includes(searchQuery) || b.name.toLowerCase().includes(searchQuery)); const grps = { pending: flt.filter(b => b.status === 'pending'), reading: flt.filter(b => b.status === 'reading'), completed: flt.filter(b => b.status === 'completed') }; ['pending', 'reading', 'completed'].forEach(s => { const grid = document.getElementById(s === 'reading' ? 'readingGrid' : s + 'Grid'); const count = document.getElementById(s === 'reading' ? 'readingCount' : s + 'Count'); const sect = document.getElementById(s === 'reading' ? 'readingSection' : s + 'Section'); if (count) count.textContent = grps[s].length + ' book' + (grps[s].length !== 1 ? 's' : ''); if (sect) sect.style.display = grps[s].length ? '' : 'none'; if (grid) grid.innerHTML = grps[s].map(bookCard).join(''); }); const es = document.getElementById('emptyState'); if (es) es.style.display = flt.length === 0 ? 'block' : 'none'; }
+function changeStatus(id, status) { const b = books.find(b => b.id === id); if (b) { b.status = status; saveBooks(); renderLibrary(); updateSidebar(); } }
 function getHlCount(id) { if (!annotations[id]) return 0; return Object.values(annotations[id]).reduce((a, pg) => a + (pg.highlights?.length || 0), 0); }
-function updateSidebar() { document.getElementById('sbTotal').innerText = books.length; document.getElementById('sbDone').innerText = books.filter(b => b.status === 'completed').length; }
+function updateSidebar() { const st = document.getElementById('sbTotal'); if (st) st.innerText = books.length; const sd = document.getElementById('sbDone'); if (sd) sd.innerText = books.filter(b => b.status === 'completed').length; }
 
+// --- PDF Reader with working next/prev ---
 async function openReader(id) {
     const b = books.find(b => b.id === id);
     if (!b || !b.dataUrl) { toast('Book data missing', 'error'); return; }
     showLoading('Opening PDF…');
-    readerBookId = id;
-    pageNum = b.currentPage || 1;
+    readerBookId = id; pageNum = b.currentPage || 1;
     if (b.status === 'pending') { b.status = 'reading'; saveBooks(); }
     try {
+        if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js not loaded');
         pdfDoc = await pdfjsLib.getDocument(b.dataUrl).promise;
-        b.totalPages = pdfDoc.numPages;
-        saveBooks();
+        b.totalPages = pdfDoc.numPages; saveBooks();
         document.getElementById('readerTitle').innerText = b.displayName;
         updateCompleteBtn(b);
         document.getElementById('readerPage').classList.add('active');
@@ -284,215 +341,94 @@ async function openReader(id) {
         hideLoading();
     } catch (err) { hideLoading(); toast('Failed to open PDF', 'error'); console.error(err); }
 }
-
 async function renderPage(num) {
     if (!pdfDoc) return;
     if (rendering) { pendingPage = num; return; }
     rendering = true;
-    const page = await pdfDoc.getPage(num);
-    const scroll = document.getElementById('canvasScroll');
-    const maxW = Math.min(scroll.clientWidth - 48, 950);
-    const scale = Math.min(maxW / page.getViewport({ scale: 1 }).width, 1.85);
-    const vp = page.getViewport({ scale });
-    const pdf = document.getElementById('pdfCanvas');
-    const hl = document.getElementById('hlCanvas');
-    const dc = document.getElementById('drawCanvas');
-    [pdf, hl, dc].forEach(c => { if (c) { c.width = vp.width; c.height = vp.height; } });
-    await page.render({ canvasContext: pdf.getContext('2d'), viewport: vp }).promise;
-    pageNum = num;
-    rendering = false;
-    const b = books.find(b => b.id === readerBookId);
-    if (b) { b.currentPage = num; saveBooks(); }
-    loadPageAnn();
-    updateReaderUI();
-    renderHlPanel();
-    if (pendingPage !== null) { const p = pendingPage; pendingPage = null; renderPage(p); }
+    try {
+        const page = await pdfDoc.getPage(num);
+        const scroll = document.getElementById('canvasScroll');
+        const maxW = scroll ? Math.min(scroll.clientWidth - 48, 950) : 800;
+        const scale = Math.min(maxW / page.getViewport({ scale: 1 }).width, 1.85);
+        const vp = page.getViewport({ scale });
+        const pdfCanvas = document.getElementById('pdfCanvas');
+        const hlCanvas = document.getElementById('hlCanvas');
+        const drawCanvas = document.getElementById('drawCanvas');
+        if (pdfCanvas) { pdfCanvas.width = vp.width; pdfCanvas.height = vp.height; }
+        if (hlCanvas) { hlCanvas.width = vp.width; hlCanvas.height = vp.height; }
+        if (drawCanvas) { drawCanvas.width = vp.width; drawCanvas.height = vp.height; }
+        if (pdfCanvas) await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
+        pageNum = num;
+        const b = books.find(b => b.id === readerBookId);
+        if (b) { b.currentPage = num; saveBooks(); }
+        loadPageAnn();
+        updateReaderUI();
+        renderHlPanel();
+        if (pendingPage !== null) { const p = pendingPage; pendingPage = null; renderPage(p); }
+    } finally { rendering = false; }
 }
-
-function loadPageAnn() {
-    if (!readerBookId) return;
-    const pg = (annotations[readerBookId] || {})[pageNum] || { strokes: [], highlights: [] };
-    currentStrokes = JSON.parse(JSON.stringify(pg.strokes || []));
-    currentHlRects = JSON.parse(JSON.stringify(pg.highlights || []));
-    redrawDraw();
-    redrawHl();
+function updateReaderUI() {
+    if (!pdfDoc) return;
+    const total = pdfDoc.numPages;
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    if (prevBtn) prevBtn.disabled = (pageNum <= 1);
+    if (nextBtn) nextBtn.disabled = (pageNum >= total);
+    const indicator = document.getElementById('pageIndicator');
+    if (indicator) indicator.innerText = pageNum + ' / ' + total;
+    const pct = Math.round((pageNum / total) * 100);
+    const progBar = document.getElementById('rProgBar');
+    if (progBar) progBar.style.width = pct + '%';
+    const footerPct = document.getElementById('footerPct');
+    if (footerPct) footerPct.innerText = pct + '%';
 }
-
-function savePageAnn() {
-    if (!readerBookId) return;
-    if (!annotations[readerBookId]) annotations[readerBookId] = {};
-    annotations[readerBookId][pageNum] = { strokes: JSON.parse(JSON.stringify(currentStrokes)), highlights: JSON.parse(JSON.stringify(currentHlRects)) };
-    saveAnn();
+function changePage(delta) {
+    if (!pdfDoc) return;
+    const newPage = pageNum + delta;
+    if (newPage >= 1 && newPage <= pdfDoc.numPages) {
+        renderPage(newPage);
+    }
 }
-
-function setupCanvasEvents() {
-    const dc = document.getElementById('drawCanvas');
-    const hl = document.getElementById('hlCanvas');
-    if (!dc || !hl) return;
-    dc.addEventListener('mousedown', e => { if (!drawActive()) return; e.preventDefault(); onStart(e.offsetX, e.offsetY); });
-    dc.addEventListener('mousemove', e => { if (!drawActive() || !isPointerDown) return; onMove(e.offsetX, e.offsetY); });
-    dc.addEventListener('mouseup', () => { if (drawActive()) onEnd(); });
-    hl.addEventListener('mousedown', e => { if (activeTool !== 'highlight') return; e.preventDefault(); hlStart = { x: e.offsetX, y: e.offsetY }; hlDragging = true; });
-    hl.addEventListener('mousemove', e => { if (activeTool !== 'highlight' || !hlDragging) return; drawTmpHl(hlStart.x, hlStart.y, e.offsetX, e.offsetY); });
-    hl.addEventListener('mouseup', e => { if (activeTool !== 'highlight' || !hlDragging) return; finishHl(hlStart.x, hlStart.y, e.offsetX, e.offsetY); hlDragging = false; });
+function seekPage(e) {
+    if (!pdfDoc) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const r = x / rect.width;
+    const n = Math.max(1, Math.min(pdfDoc.numPages, Math.round(r * pdfDoc.numPages)));
+    renderPage(n);
 }
-
+function toggleComplete() { const b = books.find(b => b.id === readerBookId); if (!b) return; b.status = b.status === 'completed' ? 'reading' : 'completed'; saveBooks(); updateCompleteBtn(b); toast(b.status === 'completed' ? '🎉 Completed!' : 'Back to reading', 'success'); }
+function updateCompleteBtn(b) { const btn = document.getElementById('completeBtn'); if (btn) { btn.innerText = b.status === 'completed' ? '✓ Completed' : 'Mark Complete'; btn.style.background = b.status === 'completed' ? 'var(--green-light)' : ''; } }
+function closeReader() { pdfDoc = null; readerBookId = null; currentStrokes = []; currentHlRects = []; document.getElementById('readerPage').classList.remove('active'); document.getElementById('hlPanel').classList.remove('open'); document.body.style.overflow = ''; renderLibrary(); updateSidebar(); }
+function loadPageAnn() { if (!readerBookId) return; const pg = (annotations[readerBookId] || {})[pageNum] || { strokes: [], highlights: [] }; currentStrokes = JSON.parse(JSON.stringify(pg.strokes || [])); currentHlRects = JSON.parse(JSON.stringify(pg.highlights || [])); redrawDraw(); redrawHl(); }
+function savePageAnn() { if (!readerBookId) return; if (!annotations[readerBookId]) annotations[readerBookId] = {}; annotations[readerBookId][pageNum] = { strokes: JSON.parse(JSON.stringify(currentStrokes)), highlights: JSON.parse(JSON.stringify(currentHlRects)) }; saveAnn(); }
+function setupCanvasEvents() { const dc = document.getElementById('drawCanvas'); const hl = document.getElementById('hlCanvas'); if (!dc || !hl) return; dc.addEventListener('mousedown', e => { if (!drawActive()) return; e.preventDefault(); onStart(e.offsetX, e.offsetY); }); dc.addEventListener('mousemove', e => { if (!drawActive() || !isPointerDown) return; onMove(e.offsetX, e.offsetY); }); dc.addEventListener('mouseup', () => { if (drawActive()) onEnd(); }); hl.addEventListener('mousedown', e => { if (activeTool !== 'highlight') return; e.preventDefault(); hlStart = { x: e.offsetX, y: e.offsetY }; hlDragging = true; }); hl.addEventListener('mousemove', e => { if (activeTool !== 'highlight' || !hlDragging) return; drawTmpHl(hlStart.x, hlStart.y, e.offsetX, e.offsetY); }); hl.addEventListener('mouseup', e => { if (activeTool !== 'highlight' || !hlDragging) return; finishHl(hlStart.x, hlStart.y, e.offsetX, e.offsetY); hlDragging = false; }); }
 function drawActive() { return activeTool === 'pencil' || activeTool === 'eraser'; }
 function onStart(x, y) { isPointerDown = true; lx = x; ly = y; activeStroke = [{ x, y }]; }
-function onMove(x, y) {
-    if (activeTool === 'pencil') {
-        const ctx = document.getElementById('drawCanvas').getContext('2d');
-        ctx.save();
-        ctx.strokeStyle = drawColor;
-        ctx.lineWidth = brushSize;
-        ctx.beginPath();
-        ctx.moveTo(lx, ly);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.restore();
-        activeStroke.push({ x, y });
-    } else if (activeTool === 'eraser') {
-        eraseAt(x, y);
-        redrawDraw();
-    }
-    lx = x; ly = y;
-}
-function onEnd() {
-    isPointerDown = false;
-    if (activeTool === 'pencil' && activeStroke.length > 1) {
-        currentStrokes.push({ pts: [...activeStroke], color: drawColor, size: brushSize });
-        activeStroke = [];
-        savePageAnn();
-    } else if (activeTool === 'eraser') {
-        savePageAnn();
-        redrawDraw();
-    }
-}
+function onMove(x, y) { if (activeTool === 'pencil') { const ctx = document.getElementById('drawCanvas').getContext('2d'); ctx.save(); ctx.strokeStyle = drawColor; ctx.lineWidth = brushSize; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke(); ctx.restore(); activeStroke.push({ x, y }); } else if (activeTool === 'eraser') { eraseAt(x, y); redrawDraw(); } lx = x; ly = y; }
+function onEnd() { isPointerDown = false; if (activeTool === 'pencil' && activeStroke.length > 1) { currentStrokes.push({ pts: [...activeStroke], color: drawColor, size: brushSize }); activeStroke = []; savePageAnn(); } else if (activeTool === 'eraser') { savePageAnn(); redrawDraw(); } }
 function eraseAt(x, y) { const r = eraserSize / 2; currentStrokes = currentStrokes.filter(s => !s.pts.some(p => Math.hypot(p.x - x, p.y - y) < r)); }
 function undoLast() { if (!currentStrokes.length) { toast('Nothing to undo', 'error'); return; } currentStrokes.pop(); redrawDraw(); savePageAnn(); }
 function clearPage() { currentStrokes = []; redrawDraw(); savePageAnn(); toast('Drawings cleared', 'success'); }
-function redrawDraw() {
-    const dc = document.getElementById('drawCanvas');
-    if (!dc) return;
-    const ctx = dc.getContext('2d');
-    ctx.clearRect(0, 0, dc.width, dc.height);
-    currentStrokes.forEach(s => {
-        if (!s.pts || s.pts.length < 2) return;
-        ctx.save();
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = s.size;
-        ctx.beginPath();
-        ctx.moveTo(s.pts[0].x, s.pts[0].y);
-        for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i].x, s.pts[i].y);
-        ctx.stroke();
-        ctx.restore();
-    });
-}
-function drawTmpHl(x1, y1, x2, y2) {
-    const hl = document.getElementById('hlCanvas');
-    if (!hl) return;
-    const ctx = hl.getContext('2d');
-    ctx.clearRect(0, 0, hl.width, hl.height);
-    currentHlRects.forEach(r => { ctx.fillStyle = r.color; ctx.fillRect(r.x, r.y, r.w, r.h); });
-    ctx.fillStyle = hlColor;
-    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
-}
-function finishHl(x1, y1, x2, y2) {
-    const w = x2 - x1, h = y2 - y1;
-    if (Math.abs(w) < 5 || Math.abs(h) < 5) { redrawHl(); return; }
-    const r = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(w), h: Math.abs(h), color: hlColor, page: pageNum, id: Date.now() };
-    currentHlRects.push(r);
-    redrawHl();
-    savePageAnn();
-    renderHlPanel();
-    toast('Highlight saved', 'success');
-}
-function redrawHl() {
-    const hl = document.getElementById('hlCanvas');
-    if (!hl) return;
-    const ctx = hl.getContext('2d');
-    ctx.clearRect(0, 0, hl.width, hl.height);
-    currentHlRects.forEach(r => { ctx.fillStyle = r.color; ctx.fillRect(r.x, r.y, r.w, r.h); });
-}
-function delHl(id, page) {
-    const nid = parseInt(id);
-    if (annotations[readerBookId] && annotations[readerBookId][page]) annotations[readerBookId][page].highlights = annotations[readerBookId][page].highlights.filter(h => h.id !== nid);
-    if (page === pageNum) currentHlRects = currentHlRects.filter(h => h.id !== nid);
-    redrawHl();
-    saveAnn();
-    renderHlPanel();
-}
-function toggleHlPanel() {
-    const p = document.getElementById('hlPanel');
-    p.classList.toggle('open');
-    const btn = document.getElementById('hlPanelBtn');
-    if (btn) btn.classList.toggle('c-active', p.classList.contains('open'));
-    renderHlPanel();
-}
-function renderHlPanel() {
-    if (!readerBookId) return;
-    const ann = annotations[readerBookId] || {};
-    const all = [];
-    Object.entries(ann).forEach(([pg, d]) => { (d.highlights || []).forEach(h => all.push({ ...h, page: parseInt(pg) })); });
-    all.sort((a, b) => a.page - b.page);
-    const sc = document.getElementById('hlScroll');
-    if (!all.length) { sc.innerHTML = '<div class="hlp-empty">No highlights yet.<br>Use the highlight tool to select areas.</div>'; return; }
-    sc.innerHTML = all.map(h => `<div class="hl-item" style="border-color:${h.color.slice(0,7)}"><div><span style="font-weight:600;">Highlight</span></div><div class="hl-pg">Page ${h.page}</div><button class="hl-del-btn" onclick="delHl('${h.id}',${h.page})">✕</button></div>`).join('');
-}
-function setTool(tool) {
-    activeTool = tool;
-    ['select', 'pencil', 'eraser', 'highlight'].forEach(t => {
-        const btn = document.getElementById('tb' + t.charAt(0).toUpperCase() + t.slice(1));
-        if (btn) btn.classList.toggle('active', t === tool);
-    });
-    const dc = document.getElementById('drawCanvas');
-    const hl = document.getElementById('hlCanvas');
-    if (dc) dc.className = '';
-    if (hl) hl.className = '';
-    if (tool === 'pencil' && dc) dc.classList.add('draw-active');
-    else if (tool === 'eraser' && dc) dc.classList.add('erase-active');
-    else if (tool === 'highlight' && hl) hl.classList.add('hl-active');
-    const gDraw = document.getElementById('grpDrawColors');
-    const gHl = document.getElementById('grpHlColors');
-    const gEr = document.getElementById('grpEraserSize');
-    if (gDraw) gDraw.style.display = tool === 'pencil' ? 'flex' : 'none';
-    if (gHl) gHl.style.display = tool === 'highlight' ? 'flex' : 'none';
-    if (gEr) gEr.style.display = tool === 'eraser' ? 'flex' : 'none';
-}
+function redrawDraw() { const dc = document.getElementById('drawCanvas'); if (!dc) return; const ctx = dc.getContext('2d'); ctx.clearRect(0, 0, dc.width, dc.height); currentStrokes.forEach(s => { if (!s.pts || s.pts.length < 2) return; ctx.save(); ctx.strokeStyle = s.color; ctx.lineWidth = s.size; ctx.beginPath(); ctx.moveTo(s.pts[0].x, s.pts[0].y); for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i].x, s.pts[i].y); ctx.stroke(); ctx.restore(); }); }
+function drawTmpHl(x1, y1, x2, y2) { const hl = document.getElementById('hlCanvas'); if (!hl) return; const ctx = hl.getContext('2d'); ctx.clearRect(0, 0, hl.width, hl.height); currentHlRects.forEach(r => { ctx.fillStyle = r.color; ctx.fillRect(r.x, r.y, r.w, r.h); }); ctx.fillStyle = hlColor; ctx.fillRect(x1, y1, x2 - x1, y2 - y1); }
+function finishHl(x1, y1, x2, y2) { const w = x2 - x1, h = y2 - y1; if (Math.abs(w) < 5 || Math.abs(h) < 5) { redrawHl(); return; } const r = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(w), h: Math.abs(h), color: hlColor, page: pageNum, id: Date.now() }; currentHlRects.push(r); redrawHl(); savePageAnn(); renderHlPanel(); toast('Highlight saved', 'success'); }
+function redrawHl() { const hl = document.getElementById('hlCanvas'); if (!hl) return; const ctx = hl.getContext('2d'); ctx.clearRect(0, 0, hl.width, hl.height); currentHlRects.forEach(r => { ctx.fillStyle = r.color; ctx.fillRect(r.x, r.y, r.w, r.h); }); }
+function delHl(id, page) { const nid = parseInt(id); if (annotations[readerBookId] && annotations[readerBookId][page]) annotations[readerBookId][page].highlights = annotations[readerBookId][page].highlights.filter(h => h.id !== nid); if (page === pageNum) currentHlRects = currentHlRects.filter(h => h.id !== nid); redrawHl(); saveAnn(); renderHlPanel(); }
+function toggleHlPanel() { const p = document.getElementById('hlPanel'); if (p) { p.classList.toggle('open'); const btn = document.getElementById('hlPanelBtn'); if (btn) btn.classList.toggle('c-active', p.classList.contains('open')); renderHlPanel(); } }
+function renderHlPanel() { if (!readerBookId) return; const ann = annotations[readerBookId] || {}; const all = []; Object.entries(ann).forEach(([pg, d]) => { (d.highlights || []).forEach(h => all.push({ ...h, page: parseInt(pg) })); }); all.sort((a, b) => a.page - b.page); const sc = document.getElementById('hlScroll'); if (!sc) return; if (!all.length) { sc.innerHTML = '<div class="hlp-empty">No highlights yet.<br>Use the highlight tool to select areas.</div>'; return; } sc.innerHTML = all.map(h => `<div class="hl-item" style="border-color:${h.color.slice(0,7)}"><div><span style="font-weight:600;">Highlight</span></div><div class="hl-pg">Page ${h.page}</div><button class="hl-del-btn" onclick="delHl('${h.id}',${h.page})">✕</button></div>`).join(''); }
+function setTool(tool) { activeTool = tool; ['select', 'pencil', 'eraser', 'highlight'].forEach(t => { const btn = document.getElementById('tb' + t.charAt(0).toUpperCase() + t.slice(1)); if (btn) btn.classList.toggle('active', t === tool); }); const dc = document.getElementById('drawCanvas'); const hl = document.getElementById('hlCanvas'); if (dc) dc.className = ''; if (hl) hl.className = ''; if (tool === 'pencil' && dc) dc.classList.add('draw-active'); else if (tool === 'eraser' && dc) dc.classList.add('erase-active'); else if (tool === 'highlight' && hl) hl.classList.add('hl-active'); const gDraw = document.getElementById('grpDrawColors'); const gHl = document.getElementById('grpHlColors'); const gEr = document.getElementById('grpEraserSize'); if (gDraw) gDraw.style.display = tool === 'pencil' ? 'flex' : 'none'; if (gHl) gHl.style.display = tool === 'highlight' ? 'flex' : 'none'; if (gEr) gEr.style.display = tool === 'eraser' ? 'flex' : 'none'; }
 function setDrawColor(el) { document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('sel')); el.classList.add('sel'); drawColor = el.dataset.c; }
 function setHlColor(el) { document.querySelectorAll('.hl-dot').forEach(d => d.classList.remove('sel')); el.classList.add('sel'); hlColor = el.dataset.c; }
-function updateReaderUI() { if (!pdfDoc) return; const total = pdfDoc.numPages; document.getElementById('prevBtn').disabled = pageNum <= 1; document.getElementById('nextBtn').disabled = pageNum >= total; document.getElementById('pageIndicator').innerText = pageNum + ' / ' + total; const pct = Math.round((pageNum / total) * 100); document.getElementById('rProgBar').style.width = pct + '%'; document.getElementById('footerPct').innerText = pct + '%'; }
-function changePage(d) { if (!pdfDoc) return; const n = pageNum + d; if (n < 1 || n > pdfDoc.numPages) return; renderPage(n); }
-function seekPage(e) { if (!pdfDoc) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.clientX - rect.left; const r = x / rect.width; const n = Math.max(1, Math.min(pdfDoc.numPages, Math.round(r * pdfDoc.numPages))); renderPage(n); }
-function toggleComplete() { const b = books.find(b => b.id === readerBookId); if (!b) return; b.status = b.status === 'completed' ? 'reading' : 'completed'; saveBooks(); updateCompleteBtn(b); toast(b.status === 'completed' ? '🎉 Marked as completed!' : 'Back to reading', 'success'); }
-function updateCompleteBtn(b) { const btn = document.getElementById('completeBtn'); if (!btn) return; btn.innerText = b.status === 'completed' ? '✓ Completed' : 'Mark Complete'; btn.style.background = b.status === 'completed' ? 'var(--green-light)' : ''; }
-function closeReader() { pdfDoc = null; readerBookId = null; currentStrokes = []; currentHlRects = []; document.getElementById('readerPage').classList.remove('active'); document.getElementById('hlPanel').classList.remove('open'); document.body.style.overflow = ''; renderLibrary(); updateSidebar(); }
-function askDelete(id) { deleteTargetId = id; document.getElementById('deleteModal').classList.add('show'); }
-function closeDeleteModal() { deleteTargetId = null; document.getElementById('deleteModal').classList.remove('show'); }
+function askDelete(id) { deleteTargetId = id; const modal = document.getElementById('deleteModal'); if (modal) modal.classList.add('show'); }
+function closeDeleteModal() { deleteTargetId = null; const modal = document.getElementById('deleteModal'); if (modal) modal.classList.remove('show'); }
 function confirmDelete() { books = books.filter(b => b.id !== deleteTargetId); delete annotations[deleteTargetId]; saveBooks(); saveAnn(); renderLibrary(); updateSidebar(); closeDeleteModal(); toast('Book removed', 'success'); }
-function renderStats() {
-    const total = books.length, done = books.filter(b => b.status === 'completed').length, reading = books.filter(b => b.status === 'reading').length, pending = books.filter(b => b.status === 'pending').length;
-    let totalHl = 0, totalStrokes = 0;
-    Object.values(annotations).forEach(b => { Object.values(b).forEach(p => { totalHl += p.highlights?.length || 0; totalStrokes += p.strokes?.length || 0; }); });
-    document.getElementById('statsGrid').innerHTML = `<div class="stat-card"><div class="big-num">${total}</div><div class="stat-label">Total Books</div></div><div class="stat-card"><div class="big-num">${done}</div><div class="stat-label">Completed</div></div><div class="stat-card"><div class="big-num">${reading}</div><div class="stat-label">In Progress</div></div><div class="stat-card"><div class="big-num">${pending}</div><div class="stat-label">Pending</div></div><div class="stat-card"><div class="big-num">${totalHl}</div><div class="stat-label">Highlights</div></div><div class="stat-card"><div class="big-num">${totalStrokes}</div><div class="stat-label">Drawings</div></div>`;
-    const sorted = [...books].sort((a, b) => (b.currentPage / (b.totalPages || 1)) - (a.currentPage / (a.totalPages || 1)));
-    document.getElementById('statsList').innerHTML = sorted.length ? sorted.map(b => { const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0; return `<div class="book-list-row"><div style="font-size:1.25rem;">📖</div><div class="list-info"><div class="list-title">${b.displayName}</div><div class="list-sub">${b.status === 'pending' ? '🕐 Pending' : b.status === 'reading' ? '📖 Reading' : '✅ Done'}</div></div><div class="list-right"><div class="list-pct">${pct}%</div><div class="list-bar-wrap"><div class="list-bar" style="width:${pct}%"></div></div></div></div>`; }).join('') : '<div class="empty-state">No books yet.</div>';
-}
-function showLoading(t) { document.getElementById('loadingText').innerText = t || 'Loading…'; document.getElementById('loadingOverlay').classList.add('show'); }
-function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
-
-document.addEventListener('keydown', e => {
-    const rp = document.getElementById('readerPage');
-    if (!rp || !rp.classList.contains('active')) return;
-    if (e.key === 'Escape') closeReader();
-    if (e.key === 'ArrowRight') changePage(1);
-    if (e.key === 'ArrowLeft') changePage(-1);
-    if (e.key === 'p') setTool('pencil');
-    if (e.key === 'e') setTool('eraser');
-    if (e.key === 'h') setTool('highlight');
-    if (e.key === 's') setTool('select');
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undoLast(); }
-});
-
+function renderStats() { const total = books.length, done = books.filter(b => b.status === 'completed').length, reading = books.filter(b => b.status === 'reading').length, pending = books.filter(b => b.status === 'pending').length; let totalHl = 0, totalStrokes = 0; Object.values(annotations).forEach(b => { Object.values(b).forEach(p => { totalHl += p.highlights?.length || 0; totalStrokes += p.strokes?.length || 0; }); }); const statsGrid = document.getElementById('statsGrid'); if (statsGrid) statsGrid.innerHTML = `<div class="stat-card"><div class="big-num">${total}</div><div class="stat-label">Total Books</div></div><div class="stat-card"><div class="big-num">${done}</div><div class="stat-label">Completed</div></div><div class="stat-card"><div class="big-num">${reading}</div><div class="stat-label">In Progress</div></div><div class="stat-card"><div class="big-num">${pending}</div><div class="stat-label">Pending</div></div><div class="stat-card"><div class="big-num">${totalHl}</div><div class="stat-label">Highlights</div></div><div class="stat-card"><div class="big-num">${totalStrokes}</div><div class="stat-label">Drawings</div></div>`; const sorted = [...books].sort((a, b) => (b.currentPage / (b.totalPages || 1)) - (a.currentPage / (a.totalPages || 1))); const statsList = document.getElementById('statsList'); if (statsList) statsList.innerHTML = sorted.length ? sorted.map(b => { const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0; return `<div class="book-list-row"><div style="font-size:1.25rem;">📖</div><div class="list-info"><div class="list-title">${escapeHtml(b.displayName)}</div><div class="list-sub">${b.status === 'pending' ? '🕐 Pending' : b.status === 'reading' ? '📖 Reading' : '✅ Done'}</div></div><div class="list-right"><div class="list-pct">${pct}%</div><div class="list-bar-wrap"><div class="list-bar" style="width:${pct}%"></div></div></div></div>`; }).join('') : '<div class="empty-state">No books yet.</div>'; }
+function showLoading(t) { const lt = document.getElementById('loadingText'); if (lt) lt.innerText = t || 'Loading…'; const ol = document.getElementById('loadingOverlay'); if (ol) ol.classList.add('show'); }
+function hideLoading() { const ol = document.getElementById('loadingOverlay'); if (ol) ol.classList.remove('show'); }
+document.addEventListener('keydown', e => { const rp = document.getElementById('readerPage'); if (!rp || !rp.classList.contains('active')) return; if (e.key === 'Escape') closeReader(); if (e.key === 'ArrowRight') changePage(1); if (e.key === 'ArrowLeft') changePage(-1); if (e.key === 'p') setTool('pencil'); if (e.key === 'e') setTool('eraser'); if (e.key === 'h') setTool('highlight'); if (e.key === 's') setTool('select'); if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undoLast(); } });
+window.navigate = navigate; window.toggleSidebar = toggleSidebar; window.toggleDark = toggleDark; window.handleFiles = handleFiles; window.handleSearch = handleSearch; window.changeStatus = changeStatus; window.openReader = openReader; window.askDelete = askDelete; window.closeDeleteModal = closeDeleteModal; window.confirmDelete = confirmDelete; window.setTool = setTool; window.setDrawColor = setDrawColor; window.setHlColor = setHlColor; window.changePage = changePage; window.seekPage = seekPage; window.toggleComplete = toggleComplete; window.closeReader = closeReader; window.undoLast = undoLast; window.clearPage = clearPage; window.toggleHlPanel = toggleHlPanel; window.delHl = delHl;
 init().catch(console.error);
 </script>
+</body>
+</html>

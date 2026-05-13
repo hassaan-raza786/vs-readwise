@@ -1,8 +1,12 @@
 {
-  "version": 2,
+  "functions": {
+    "api/progress.py": {
+      "runtime": "python3.9"
+    }
+  },
   "builds": [
     {
-      "src": "api/**/*.py",
+      "src": "api/progress.py",
       "use": "@vercel/python"
     },
     {
@@ -12,8 +16,20 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1.py"
+      "src": "/api/progress",
+      "dest": "/api/progress.py"
+    },
+    {
+      "src": "/api/health",
+      "dest": "/api/progress.py"
+    },
+    {
+      "src": "/api/books",
+      "dest": "/api/progress.py"
+    },
+    {
+      "src": "/api/books/(.*)",
+      "dest": "/api/progress.py"
     },
     {
       "src": "/(.*)",
